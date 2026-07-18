@@ -12,7 +12,7 @@ def main() -> None:
     init_db(settings.database_url)
 
     st.set_page_config(page_title="HintCode", layout="wide")
-    st.title("HintCode: Python 코딩 학습")
+    st.title("HintCode: Learn Python Coding")
 
     with get_session(settings.database_url) as session:
         service = ProblemService(session)
@@ -22,8 +22,8 @@ def main() -> None:
             render_problem_detail(service, int(query_params["problem_id"]))
             return
 
-        page = st.sidebar.selectbox("페이지", ["문제 목록", "문제 상세"])
-        if page == "문제 목록":
+        page = st.sidebar.selectbox("Page", ["Problem List", "Problem Detail"])
+        if page == "Problem List":
             render_problem_list(service)
         else:
             render_problem_detail(service)
