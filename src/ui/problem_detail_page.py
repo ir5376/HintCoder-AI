@@ -3,9 +3,12 @@ import streamlit as st
 from src.services.problem_service import ProblemService
 
 
-def render_problem_detail(service: ProblemService) -> None:
+def render_problem_detail(service: ProblemService, problem_id: int | None = None) -> None:
     st.subheader("Problem Details")
-    problem_id = st.sidebar.number_input("problem ID", min_value=1, step=1, value=1)
+
+    if problem_id is None:
+        problem_id = st.sidebar.number_input("problem ID", min_value=1, step=1, value=1)
+
     problem = service.get_problem(int(problem_id))
 
     if problem is None:
