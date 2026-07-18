@@ -17,6 +17,11 @@ def main() -> None:
     with get_session(settings.database_url) as session:
         service = ProblemService(session)
 
+        query_params = st.query_params
+        if query_params.get("page") == "detail" and query_params.get("problem_id") is not None:
+            render_problem_detail(service, int(query_params["problem_id"]))
+            return
+
         page = st.sidebar.selectbox("페이지", ["문제 목록", "문제 상세"])
         if page == "문제 목록":
             render_problem_list(service)

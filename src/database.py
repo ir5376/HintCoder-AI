@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -47,17 +47,15 @@ def _seed_database(engine: Engine) -> None:
         return
 
     with SessionLocal.begin() as session:
-        existing_keys = {
-            (problem.title, problem.function_name)
-            for problem in session.query(Problem).all()
-        }
+        session.query(Problem).delete(synchronize_session=False)
+        if engine.dialect.name == "sqlite":
+            try:
+                session.execute(text("DELETE FROM sqlite_sequence WHERE name='problems'"))
+            except Exception:
+                pass
 
         for item in seed_items:
-            key = (item.get("title"), item.get("function_name"))
-            if key in existing_keys:
-                continue
             session.add(Problem.from_dict(item))
-            existing_keys.add(key)
 
 
 @contextmanager
