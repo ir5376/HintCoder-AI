@@ -2,6 +2,7 @@ import streamlit as st
 
 from src.config import get_settings
 from src.database import init_db, get_session
+from src.services.hint_service import HintService
 from src.services.problem_service import ProblemService
 from src.ui.problem_detail_page import render_problem_detail
 from src.ui.problem_list_page import render_problem_list
@@ -16,18 +17,18 @@ def main() -> None:
 
     with get_session(settings.database_url) as session:
         service = ProblemService(session)
+        hint_service = HintService(session)
 
         query_params = st.query_params
         if query_params.get("page") == "detail" and query_params.get("problem_id") is not None:
-            render_problem_detail(service, int(query_params["problem_id"]))
+            render_problem_detail(service, int(query_params["problem_id"]), hint_service=hint_service)
             return
-
 
         page = st.sidebar.selectbox("Page", ["Problem List", "Problem Detail"])
         if page == "Problem List":
             render_problem_list(service)
         else:
-            render_problem_detail(service)
+            render_problem_detail(service, hint_service=hint_service)
 
 
 if __name__ == "__main__":
