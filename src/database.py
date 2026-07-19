@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -15,6 +15,7 @@ from src.models.problem import Problem
 ROOT_DIR = Path(__file__).resolve().parents[1]
 SEED_PATH = ROOT_DIR / "seed" / "problems.json"
 JSON_DATA_PATH = ROOT_DIR / "data" / "problems.json"
+PROBLEMS_DIR = ROOT_DIR / "problems"
 
 
 def get_engine(database_url: str) -> Engine:
@@ -28,9 +29,30 @@ def init_db(database_url: str) -> None:
     engine = get_engine(database_url)
     try:
         Base.metadata.create_all(engine)
+        _ensure_problem_table_columns(engine)
         _seed_database(engine)
     finally:
         engine.dispose()
+
+
+def _ensure_problem_table_columns(engine: Engine) -> None:
+    """Add missing columns to existing problem tables so older SQLite databases keep working."""
+    inspector = inspect(engine)
+    if not inspector.has_table("problems"):
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns("problems")}
+    required_columns = {
+        "tags": "TEXT",
+    }
+
+    if not required_columns.keys() - existing_columns:
+        return
+
+    with engine.begin() as connection:
+        for column_name, column_type in required_columns.items():
+            if column_name not in existing_columns:
+                connection.execute(text(f"ALTER TABLE problems ADD COLUMN {column_name} {column_type}"))
 
 
 def _load_seed_data() -> list[dict]:
@@ -41,11 +63,40 @@ def _load_seed_data() -> list[dict]:
         return json.load(handle)
 
 
+def _load_problem_dir_data() -> list[dict]:
+    if not PROBLEMS_DIR.exists():
+        return []
+
+    problems: list[dict] = []
+    for path in sorted(PROBLEMS_DIR.glob("*.json")):
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        if isinstance(payload, dict):
+            items = payload.get("problems") or payload.get("items") or []
+        elif isinstance(payload, list):
+            items = payload
+        else:
+            items = []
+
+        if isinstance(items, list):
+            problems.extend(item for item in items if isinstance(item, dict))
+
+    return problems
+
+
 def _seed_database(engine: Engine) -> None:
     SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
     seed_items = _load_seed_data()
-    if not seed_items:
+    problem_dir_items = _load_problem_dir_data()
+    combined_items = seed_items + problem_dir_items
+    if not combined_items:
         return
+
+    seen_keys: set[tuple] = set()
 
     with SessionLocal.begin() as session:
         session.query(Problem).delete(synchronize_session=False)
@@ -55,7 +106,11 @@ def _seed_database(engine: Engine) -> None:
             except Exception:
                 pass
 
-        for item in seed_items:
+        for item in combined_items:
+            key = (item.get("id"), item.get("title"), item.get("function_name"))
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
             session.add(Problem.from_dict(item))
 
 
