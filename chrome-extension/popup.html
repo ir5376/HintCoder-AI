@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HintCode Helper</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 12px;
+        width: 320px;
+        min-height: 220px;
+        background: #f7f9fc;
+      }
+
+      h3 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+
+      .info {
+        background: #fff;
+        border: 1px solid #dce3ec;
+        border-radius: 8px;
+        padding: 10px;
+        font-size: 13px;
+        line-height: 1.5;
+        margin-bottom: 10px;
+        word-break: break-word;
+      }
+
+      button {
+        width: 100%;
+        padding: 10px;
+        border: none;
+        border-radius: 6px;
+        background: #2563eb;
+        color: white;
+        cursor: pointer;
+        font-size: 14px;
+      }
+
+      button:hover {
+        background: #1d4ed8;
+      }
+
+      .muted {
+        color: #6b7280;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h3>HintCode Helper</h3>
+    <div id="status" class="info">Loading…</div>
+    <button id="openHintCode">Open HintCode</button>
+    <p class="muted">This extension reads the current Programmers problem page and opens HintCode with the problem details.</p>
+    <script src="popup.js"></script>
+  </body>
+</html>
