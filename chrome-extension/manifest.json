@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "HintCode Problem Helper",
+  "version": "1.0.0",
+  "description": "Reads Programmers problem information and opens HintCode with the problem details.",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["https://school.programmers.co.kr/*", "http://localhost:8501/*"],
+  "action": {
+    "default_title": "HintCode Problem Helper",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://school.programmers.co.kr/*"],
+      "js": ["content.js"]
+    }
+  ]
+}
