@@ -6,6 +6,7 @@ from src.services.hint_service import HintService
 from src.services.problem_service import ProblemService
 from src.ui.problem_detail_page import render_problem_detail
 from src.ui.problem_list_page import render_problem_list
+from src.ui.query_params_helper import get_problem_context_from_query_params
 
 
 def main() -> None:
@@ -20,15 +21,28 @@ def main() -> None:
         hint_service = HintService(session)
 
         query_params = st.query_params
+        problem_context = get_problem_context_from_query_params()
+
         if query_params.get("page") == "detail" and query_params.get("problem_id") is not None:
-            render_problem_detail(service, int(query_params["problem_id"]), hint_service=hint_service)
+            render_problem_detail(
+                service,
+                int(query_params["problem_id"]),
+                hint_service=hint_service,
+                external_title=problem_context["problem_title"],
+                external_url=problem_context["problem_url"],
+            )
             return
 
         page = st.sidebar.selectbox("Page", ["Problem List", "Problem Detail"])
         if page == "Problem List":
             render_problem_list(service)
         else:
-            render_problem_detail(service, hint_service=hint_service)
+            render_problem_detail(
+                service,
+                hint_service=hint_service,
+                external_title=problem_context["problem_title"],
+                external_url=problem_context["problem_url"],
+            )
 
 
 if __name__ == "__main__":

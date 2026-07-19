@@ -1,4 +1,5 @@
 import traceback
+from urllib.parse import urlparse
 
 import streamlit as st
 
@@ -58,12 +59,42 @@ def _render_code_editor(label: str, value: str, key: str, *, language: str = "py
     return st.text_area(label, value=value, height=250, key=key)
 
 
+def _is_safe_external_url(url: str | None) -> bool:
+    if not url:
+        return False
+
+    parsed_url = urlparse(url)
+    return parsed_url.scheme in {"http", "https"} and bool(parsed_url.netloc)
+
+
 def render_problem_detail(
     service: ProblemService,
     problem_id: int | None = None,
     hint_service: HintService | None = None,
+    external_title: str | None = None,
+    external_url: str | None = None,
 ) -> None:
     st.subheader("Problem Details")
+
+    if external_title is not None:
+        st.session_state["external_problem_title"] = external_title
+    else:
+        st.session_state.pop("external_problem_title", None)
+    if external_url is not None:
+        st.session_state["external_problem_url"] = external_url
+    else:
+        st.session_state.pop("external_problem_url", None)
+
+    current_external_title = st.session_state.get("external_problem_title")
+    current_external_url = st.session_state.get("external_problem_url")
+    safe_external_url = current_external_url if _is_safe_external_url(current_external_url) else None
+
+    if current_external_title:
+        st.info(f"Problem from extension: **{current_external_title}**")
+    if safe_external_url:
+        st.link_button("View original problem", safe_external_url)
+    elif current_external_url:
+        st.caption("Original problem link is not shown because the URL is invalid.")
 
     if problem_id is None:
         problem_id = st.sidebar.number_input("problem ID", min_value=1, step=1, value=1)
@@ -73,6 +104,12 @@ def render_problem_detail(
     if problem is None:
         st.error("Cannot find the problem.")
         return
+
+    hint_problem = dict(problem)
+    if current_external_title:
+        hint_problem["title"] = current_external_title
+    if safe_external_url:
+        hint_problem["source_reference"] = safe_external_url
 
     st.markdown(f"## {problem['id']}. {problem['title']}")
     st.write(f"**Category:** {problem['category']}  |  **Difficulty:** {problem['difficulty']}")
@@ -134,7 +171,7 @@ def render_problem_detail(
         with st.spinner("Generating a hint..."):
             try:
                 context = build_hint_context(
-                    problem,
+                    hint_problem,
                     student_code=student_code,
                     programming_language=programming_language,
                     hint_level=hint_level,
@@ -157,7 +194,7 @@ def render_problem_detail(
                     "generated_hint": result["hint"],
                     "hint_level": result.get("hint_level", hint_level),
                     "programming_language": programming_language,
-                    "problem_title": problem["title"],
+                    "problem_title": hint_problem["title"],
                 },
             )
             st.session_state["hint_history"] = history[:8]

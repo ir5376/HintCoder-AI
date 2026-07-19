@@ -1,5 +1,6 @@
 import src.ui.problem_detail_page as problem_detail_page
 from src.ui.problem_detail_page import build_hint_context
+from src.ui.problem_detail_page import _is_safe_external_url
 
 
 def test_build_hint_context_uses_problem_details_and_user_inputs():
@@ -42,3 +43,11 @@ def test_problem_detail_page_uses_st_ace_when_available(monkeypatch):
 
     assert result == "print('hi')"
     assert captured["language"] == "python"
+
+
+def test_is_safe_external_url_accepts_only_http_urls():
+    assert _is_safe_external_url("https://school.programmers.co.kr/learn/courses/30/lessons/43165")
+    assert _is_safe_external_url("http://example.com/problem")
+    assert not _is_safe_external_url("javascript:alert(1)")
+    assert not _is_safe_external_url("file:///C:/secret.txt")
+    assert not _is_safe_external_url("school.programmers.co.kr/learn/courses/30/lessons/43165")
