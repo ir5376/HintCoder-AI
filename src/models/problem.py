@@ -26,6 +26,7 @@ class Problem(Base):
     explanation: Mapped[str] = mapped_column(Text, nullable=True)
     source_type: Mapped[str] = mapped_column(String(100), nullable=True)
     source_reference: Mapped[str] = mapped_column(String(255), nullable=True)
+    tags: Mapped[str] = mapped_column(Text, nullable=True)
 
     @classmethod
     def from_dict(cls, item: Dict[str, Any]) -> "Problem":
@@ -55,6 +56,7 @@ class Problem(Base):
             explanation=item.get("explanation", ""),
             source_type=item.get("source_type", ""),
             source_reference=item.get("source_reference", ""),
+            tags=json.dumps(item.get("tags", []), ensure_ascii=False),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -72,4 +74,5 @@ class Problem(Base):
             "explanation": self.explanation,
             "source_type": self.source_type,
             "source_reference": self.source_reference,
+            "tags": json.loads(self.tags or "[]"),
         }
