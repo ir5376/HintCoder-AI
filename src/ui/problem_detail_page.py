@@ -1,3 +1,5 @@
+import traceback
+
 import streamlit as st
 
 from src.services.hint_service import HintService, ProblemContext
@@ -98,8 +100,10 @@ def render_problem_detail(
                     hint_level=hint_level,
                 )
                 result = hint_service.generate_hint(context, hint_level=hint_level)
-            except Exception:
+            except Exception as exc:
+                traceback.print_exc()
                 st.error("Sorry, I could not generate a hint right now. Please try again.")
+                st.caption(f"Exception type: {type(exc).__name__}")
                 return
 
         if result.get("hint"):

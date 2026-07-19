@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import os
 import re
+import traceback
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Optional
+
+from dotenv import load_dotenv
 
 from src.models.hint import HintHistory
 from src.models.problem import Problem
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 
 @dataclass
@@ -35,16 +41,18 @@ class HintService:
         if self.openai_client is not None:
             return self.openai_client
 
-        api_key = os.environ.get("OPENAI_API_KEY")
+        api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
+            print("[HintService] GEMINI_API_KEY is missing; using fallback hint.")
             return None
 
         try:
-            from openai import OpenAI
-        except Exception:
+            from google import genai
+        except Exception as exc:
+            print(f"[HintService] Google GenAI SDK import failed: {type(exc).__name__}: {exc}")
             return None
 
-        return OpenAI(api_key=api_key)
+        return genai.Client(api_key=api_key)
 
     def build_problem_context(
         self,
@@ -77,7 +85,7 @@ class HintService:
         level = max(1, min(level, 4))
 
         prompt = self._build_prompt(context, level)
-        raw_response = self._call_openai(prompt)
+        raw_response = self._call_gemini(prompt)
         hint = self._normalize_hint(raw_response, context, level)
 
         self._store_hint_history(context, level, hint)
@@ -164,22 +172,28 @@ class HintService:
         ]
         return "\n".join(prompt_parts)
 
-    def _call_openai(self, prompt: str) -> Optional[str]:
+    def _call_gemini(self, prompt: str) -> Optional[str]:
         client = self._get_client()
         if client is None:
             return None
 
         try:
-            if hasattr(client, "responses") and hasattr(client.responses, "create"):
-                response = client.responses.create(
-                    model="gpt-4.1-mini",
-                    input=prompt,
+            model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+            if hasattr(client, "models") and hasattr(client.models, "generate_content"):
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
                 )
                 return self._extract_response_text(response)
 
-            if hasattr(client, "chat") and hasattr(client.chat, "completions"):
-                raise RuntimeError("Chat Completions API is not supported by this service")
-        except Exception:
+            if hasattr(client, "generate_content"):
+                response = client.generate_content(model=model_name, contents=prompt)
+                return self._extract_response_text(response)
+
+            raise RuntimeError("Unexpected Gemini client interface")
+        except Exception as exc:
+            print(f"[HintService] Gemini request failed: {type(exc).__name__}: {exc}")
+            traceback.print_exc()
             return None
 
         return None
@@ -187,8 +201,18 @@ class HintService:
     def _extract_response_text(self, response: Any) -> Optional[str]:
         if response is None:
             return None
+        if hasattr(response, "text") and response.text:
+            return response.text
         if hasattr(response, "output_text") and response.output_text:
             return response.output_text
+        if hasattr(response, "candidates") and response.candidates:
+            first_candidate = response.candidates[0]
+            if hasattr(first_candidate, "content") and hasattr(first_candidate.content, "parts"):
+                parts = first_candidate.content.parts
+                if parts:
+                    first_part = parts[0]
+                    if hasattr(first_part, "text"):
+                        return first_part.text
         if hasattr(response, "output") and response.output:
             content_items = response.output[0].content
             if content_items:
@@ -243,14 +267,8 @@ class HintService:
 
     def _store_hint_history(self, context: ProblemContext, hint_level: int, hint: str) -> None:
         record = HintHistory(
-            submission_id=None,
-            source_platform=context.source_platform,
-            external_problem_id=context.external_problem_id,
-            problem_id=context.problem_id,
-            programming_language=context.programming_language,
-            student_code=context.student_code,
+            submission_id=0,
             hint_level=hint_level,
-            generated_hint=hint,
             hint_text=hint,
         )
         self.session.add(record)
