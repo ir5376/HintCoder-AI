@@ -5,6 +5,11 @@ import streamlit as st
 from src.services.hint_service import HintService, ProblemContext
 from src.services.problem_service import ProblemService
 
+try:
+    from streamlit_ace import st_ace
+except ImportError:  # pragma: no cover - optional dependency in test environments
+    st_ace = None
+
 
 def build_hint_context(
     problem: dict,
@@ -36,6 +41,21 @@ def _normalize_history_entry(entry: dict) -> dict:
         "programming_language": entry.get("programming_language", "Python"),
         "problem_title": entry.get("problem_title") or entry.get("title") or "Problem",
     }
+
+
+def _render_code_editor(label: str, value: str, key: str, *, language: str = "python") -> str:
+    if st_ace is not None:
+        return st_ace(
+            value=value,
+            language=language,
+            theme="monokai",
+            key=key,
+            height=250,
+            auto_update=False,
+            show_gutter=True,
+        )
+
+    return st.text_area(label, value=value, height=250, key=key)
 
 
 def render_problem_detail(
@@ -93,7 +113,18 @@ def render_problem_detail(
     if editor_key not in st.session_state:
         st.session_state[editor_key] = templates.get(programming_language, "")
 
-    student_code = st.text_area("Your code", value=st.session_state[editor_key], height=250, key=editor_key)
+    ace_language_map = {
+        "Python": "python",
+        "JavaScript": "javascript",
+        "Java": "java",
+        "C++": "c_cpp",
+    }
+    student_code = _render_code_editor(
+        "Your code",
+        st.session_state[editor_key],
+        editor_key,
+        language=ace_language_map.get(programming_language, "python"),
+    )
 
     if st.button("Get Hint", type="primary"):
         if hint_service is None:

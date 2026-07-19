@@ -1,3 +1,4 @@
+import src.ui.problem_detail_page as problem_detail_page
 from src.ui.problem_detail_page import build_hint_context
 
 
@@ -25,3 +26,19 @@ def test_build_hint_context_uses_problem_details_and_user_inputs():
     assert context.hint_level == 3
     assert context.student_code.startswith("def solution")
     assert context.source_url == "https://example.com"
+
+
+def test_problem_detail_page_uses_st_ace_when_available(monkeypatch):
+    captured = {}
+
+    def fake_st_ace(*args, **kwargs):
+        captured.update(kwargs)
+        return "print('hi')"
+
+    monkeypatch.setattr(problem_detail_page, "st_ace", fake_st_ace, raising=False)
+    monkeypatch.setattr(problem_detail_page, "st", type("FakeSt", (), {"text_area": lambda *args, **kwargs: ""})())
+
+    result = problem_detail_page._render_code_editor("Your code", "", "editor_key", language="python")
+
+    assert result == "print('hi')"
+    assert captured["language"] == "python"
