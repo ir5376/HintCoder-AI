@@ -82,9 +82,18 @@ def render_problem_detail(
     with col2:
         hint_level = st.selectbox("Hint level", [1, 2, 3, 4], index=0)
 
-    editor_key = f"code_editor_{problem['id']}"
-    default_code = st.session_state.get(editor_key, problem.get("starter_code", "") or "")
-    student_code = st.text_area("Your code", value=default_code, height=250, key=editor_key)
+    templates = {
+        "Python": problem.get("starter_code", "") or "",
+        "JavaScript": "function solution() {\n    // Write your solution here\n}",
+        "Java": "class Solution {\n    public static void main(String[] args) {\n        // Write your solution here\n    }\n}",
+        "C++": "#include <iostream>\nusing namespace std;\n\nint main() {\n    // Write your solution here\n    return 0;\n}",
+    }
+
+    editor_key = f"code_editor_{problem['id']}_{programming_language}"
+    if editor_key not in st.session_state:
+        st.session_state[editor_key] = templates.get(programming_language, "")
+
+    student_code = st.text_area("Your code", value=st.session_state[editor_key], height=250, key=editor_key)
 
     if st.button("Get Hint", type="primary"):
         if hint_service is None:
