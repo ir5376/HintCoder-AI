@@ -1,0 +1,23 @@
+[
+  {
+    "id": 1,
+    "title": "짝수 판별",
+    "description": "정수가 주어졌을 때 짝수인지 확인하는 함수를 작성하세요.",
+    "category": "조건문",
+    "difficulty": "쉬움"
+  },
+  {
+    "id": 2,
+    "title": "리스트 합 구하기",
+    "description": "숫자 리스트가 주어지면 모든 요소의 합을 반환하는 함수를 작성하세요.",
+    "category": "반복문",
+    "difficulty": "쉬움"
+  },
+  {
+    "id": 3,
+    "title": "문자열 뒤집기",
+    "description": "문자열을 반대로 뒤집어 반환하는 함수를 작성하세요.",
+    "category": "문자열",
+    "difficulty": "중간"
+  }
+]

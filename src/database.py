@@ -14,6 +14,7 @@ from src.models.problem import Problem
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 SEED_PATH = ROOT_DIR / "seed" / "problems.json"
+JSON_DATA_PATH = ROOT_DIR / "data" / "problems.json"
 
 
 def get_engine(database_url: str) -> Engine:
@@ -56,6 +57,28 @@ def _seed_database(engine: Engine) -> None:
 
         for item in seed_items:
             session.add(Problem.from_dict(item))
+
+
+class ProblemDatabase:
+    def __init__(self, data_path: str | Path | None = None) -> None:
+        self.data_path = Path(data_path) if data_path else JSON_DATA_PATH
+
+    def _load_problems(self) -> list[dict]:
+        if not self.data_path.exists():
+            return []
+
+        with self.data_path.open("r", encoding="utf-8") as handle:
+            return json.load(handle)
+
+    def get_all_problems(self) -> list[dict]:
+        return self._load_problems()
+
+    def get_problem_by_id(self, problem_id: int) -> dict | None:
+        problems = self._load_problems()
+        for problem in problems:
+            if problem.get("id") == problem_id:
+                return problem
+        return None
 
 
 @contextmanager
