@@ -10,6 +10,14 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.models.base import Base
+from src.models.learning import (
+    LearningEvent,
+    LearningMemory,
+    LearningTrendSnapshot,
+    ProviderProblem,
+    ProviderSubmission,
+    ReviewSchedule,
+)
 from src.models.problem import Problem
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -30,6 +38,7 @@ def init_db(database_url: str) -> None:
     try:
         Base.metadata.create_all(engine)
         _ensure_problem_table_columns(engine)
+        _ensure_learning_event_table_columns(engine)
         _seed_database(engine)
     finally:
         engine.dispose()
@@ -53,6 +62,49 @@ def _ensure_problem_table_columns(engine: Engine) -> None:
         for column_name, column_type in required_columns.items():
             if column_name not in existing_columns:
                 connection.execute(text(f"ALTER TABLE problems ADD COLUMN {column_name} {column_type}"))
+
+
+def _ensure_learning_event_table_columns(engine: Engine) -> None:
+    inspector = inspect(engine)
+    if not inspector.has_table("learning_events"):
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns("learning_events")}
+    required_columns = {
+        "mode": "VARCHAR(50) NOT NULL DEFAULT 'learning'",
+        "content_module": "VARCHAR(100) NOT NULL DEFAULT 'coding'",
+        "content_id": "VARCHAR(255)",
+        "hint_level_used": "INTEGER NOT NULL DEFAULT 0",
+        "thinking_progress": "FLOAT",
+        "reflection_json": "TEXT NOT NULL DEFAULT '{}'",
+        "exam_timer_seconds": "INTEGER",
+        "exam_hints_available": "BOOLEAN",
+        "exam_hint_penalty_enabled": "BOOLEAN",
+        "exam_hint_penalty_points": "FLOAT",
+        "exam_final_score": "FLOAT",
+        "exam_report_json": "TEXT NOT NULL DEFAULT '{}'",
+        "coach_action": "VARCHAR(100)",
+        "coach_question": "TEXT",
+        "execution_trace_json": "TEXT NOT NULL DEFAULT '{}'",
+        "provider": "VARCHAR(100)",
+        "provider_submission_id": "VARCHAR(255)",
+    }
+
+    with engine.begin() as connection:
+        for column_name, column_type in required_columns.items():
+            if column_name not in existing_columns:
+                connection.execute(text(f"ALTER TABLE learning_events ADD COLUMN {column_name} {column_type}"))
+
+    if inspector.has_table("review_schedules"):
+        review_columns = {column["name"] for column in inspector.get_columns("review_schedules")}
+        review_required_columns = {
+            "content_module": "VARCHAR(100) NOT NULL DEFAULT 'coding'",
+            "content_id": "VARCHAR(255)",
+        }
+        with engine.begin() as connection:
+            for column_name, column_type in review_required_columns.items():
+                if column_name not in review_columns:
+                    connection.execute(text(f"ALTER TABLE review_schedules ADD COLUMN {column_name} {column_type}"))
 
 
 def _load_seed_data() -> list[dict]:

@@ -4,6 +4,7 @@ from src.ui.problem_detail_page import _is_safe_external_url
 from src.ui.problem_detail_page import _build_external_problem_context
 from src.ui.problem_detail_page import _external_session_payload
 from src.ui.problem_detail_page import _reset_external_problem_state
+from src.services.hint_service import HintService, ProblemContext
 
 
 def test_build_hint_context_uses_problem_details_and_user_inputs():
@@ -62,8 +63,12 @@ def test_external_session_payload_saves_required_fields():
     assert payload == {
         "problem_title": "Two Sum",
         "problem_url": "https://example.com/two-sum",
+        "provider": "external",
+        "provider_problem_id": payload["provider_problem_id"],
+        "content_id": payload["content_id"],
         "hint_level_used": 2,
     }
+    assert payload["content_id"].startswith("external:")
 
 
 def test_build_external_problem_context_uses_external_problem_details():
@@ -97,6 +102,9 @@ def test_reset_external_problem_state_initializes_session(monkeypatch):
     assert fake_session_state["external_problem_session"] == {
         "problem_title": "Two Sum",
         "problem_url": "https://example.com/two-sum",
+        "provider": "external",
+        "provider_problem_id": fake_session_state["external_problem_session"]["provider_problem_id"],
+        "content_id": fake_session_state["external_problem_session"]["content_id"],
         "hint_level_used": 0,
     }
 
@@ -117,3 +125,45 @@ def test_reset_external_problem_state_preserves_existing_same_problem(monkeypatc
     assert fake_session_state["external_hint_level_used"] == 2
     assert fake_session_state["external_hint_history"] == [{"hint_level": 1}]
     assert fake_session_state["external_code_editor"] == "print('keep')"
+
+
+def test_hint_service_coach_supports_interactive_actions():
+    class DummySession:
+        def add(self, record):
+            pass
+
+        def commit(self):
+            pass
+
+    class DummyClient:
+        class _Models:
+            def generate_content(self, **kwargs):
+                prompt = kwargs["contents"]
+                assert "Coaching action: Validate My Idea" in prompt
+                assert "Learner question: I think BFS is correct." in prompt
+                assert "Execution trace:" in prompt
+                return type("Response", (), {"text": "Your BFS idea is plausible; check how you track visited states."})()
+
+        def __init__(self):
+            self.models = self._Models()
+
+    service = HintService(DummySession(), openai_client=DummyClient())
+    context = ProblemContext(
+        source_platform="HintCode",
+        title="Graph Traversal",
+        description="Find reachable nodes.",
+        student_code="",
+        hint_level=1,
+    )
+
+    result = service.coach(
+        context,
+        action="validate_idea",
+        user_question="I think BFS is correct.",
+        execution_trace={"status": "completed", "steps": []},
+        current_step="AI Coach",
+    )
+
+    assert result["action"] == "validate_idea"
+    assert result["label"] == "Validate My Idea"
+    assert "BFS idea" in result["response"]

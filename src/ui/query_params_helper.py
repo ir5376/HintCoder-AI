@@ -1,4 +1,4 @@
-"""URL query parameter utilities for HintCode."""
+"""URL query parameter utilities for Nextep external content."""
 
 import streamlit as st
 
@@ -11,7 +11,7 @@ def _first_query_value(value):
 
 def get_problem_context_from_query_params() -> dict:
     """
-    Extract problem_title and problem_url from URL query parameters.
+    Extract external problem context from URL query parameters.
     
     Returns:
         dict with 'problem_title' and 'problem_url' keys (None if not present)
@@ -19,8 +19,10 @@ def get_problem_context_from_query_params() -> dict:
     query_params = st.query_params
     problem_title = _first_query_value(query_params.get("problem_title"))
     problem_url = _first_query_value(query_params.get("problem_url"))
+    language = _first_query_value(query_params.get("language"))
 
     return {
         "problem_title": problem_title.strip() if isinstance(problem_title, str) and problem_title.strip() else None,
         "problem_url": problem_url.strip() if isinstance(problem_url, str) and problem_url.strip() else None,
+        "language": language.strip() if isinstance(language, str) and language.strip() else None,
     }

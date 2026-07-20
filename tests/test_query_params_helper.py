@@ -19,6 +19,7 @@ def test_get_problem_context_from_query_params_reads_title_and_url(monkeypatch):
 
     assert context["problem_title"] == "Programmers Target Number"
     assert context["problem_url"] == "https://school.programmers.co.kr/learn/courses/30/lessons/43165"
+    assert context["language"] is None
 
 
 def test_get_problem_context_from_query_params_handles_missing_values(monkeypatch):
@@ -28,7 +29,7 @@ def test_get_problem_context_from_query_params_handles_missing_values(monkeypatc
 
     context = query_params_helper.get_problem_context_from_query_params()
 
-    assert context == {"problem_title": None, "problem_url": None}
+    assert context == {"problem_title": None, "problem_url": None, "language": None}
 
 
 def test_get_problem_context_from_query_params_accepts_list_values(monkeypatch):
@@ -39,6 +40,7 @@ def test_get_problem_context_from_query_params_accepts_list_values(monkeypatch):
             "query_params": {
                 "problem_title": ["Two Sum"],
                 "problem_url": ["https://example.com/two-sum"],
+                "language": ["Java"],
             }
         },
     )()
@@ -49,6 +51,7 @@ def test_get_problem_context_from_query_params_accepts_list_values(monkeypatch):
 
     assert context["problem_title"] == "Two Sum"
     assert context["problem_url"] == "https://example.com/two-sum"
+    assert context["language"] == "Java"
 
 
 def test_get_problem_context_from_query_params_preserves_korean_title(monkeypatch):
@@ -68,3 +71,4 @@ def test_get_problem_context_from_query_params_preserves_korean_title(monkeypatc
     context = query_params_helper.get_problem_context_from_query_params()
 
     assert context["problem_title"] == "타겟 넘버"
+    assert context["language"] is None

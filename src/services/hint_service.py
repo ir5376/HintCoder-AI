@@ -32,6 +32,96 @@ class ProblemContext:
     problem_id: Optional[int] = None
 
 
+@dataclass(frozen=True)
+class CoachingAction:
+    key: str
+    label: str
+    response_style: str
+    prompt_instruction: str
+
+
+COACHING_ACTIONS = {
+    "generate_hint": CoachingAction(
+        key="generate_hint",
+        label="Generate Hint",
+        response_style="progressive_hint",
+        prompt_instruction="Give a progressive hint that helps the learner take the next step.",
+    ),
+    "validate_idea": CoachingAction(
+        key="validate_idea",
+        label="Validate My Idea",
+        response_style="idea_validation",
+        prompt_instruction="Validate the learner's idea, name the risk if any, and ask one guiding follow-up question.",
+    ),
+    "ask_coach": CoachingAction(
+        key="ask_coach",
+        label="Ask My Coach",
+        response_style="interactive_coaching",
+        prompt_instruction="Answer the learner's question Socratically without revealing the final answer.",
+    ),
+    "explain_concept": CoachingAction(
+        key="explain_concept",
+        label="Explain Concept",
+        response_style="concept_explanation",
+        prompt_instruction="Explain the missing concept with a small analogy or minimal example, not the full solution.",
+    ),
+    "explain_wrong_choices": CoachingAction(
+        key="explain_wrong_choices",
+        label="Explain Wrong Choices",
+        response_style="choice_analysis",
+        prompt_instruction="Explain why each wrong choice is tempting but incorrect, then reinforce the correct concept.",
+    ),
+    "give_progressive_hint": CoachingAction(
+        key="give_progressive_hint",
+        label="Give Progressive Hint",
+        response_style="progressive_hint",
+        prompt_instruction="Give the next smallest hint for this content type without revealing the answer.",
+    ),
+    "explain_algorithm": CoachingAction(
+        key="explain_algorithm",
+        label="Explain Algorithm",
+        response_style="algorithm_explanation",
+        prompt_instruction="Explain the algorithmic idea and complexity without writing a full implementation.",
+    ),
+    "complexity_check": CoachingAction(
+        key="complexity_check",
+        label="Complexity Check",
+        response_style="complexity_feedback",
+        prompt_instruction="Evaluate the likely time and space complexity and suggest what to inspect next.",
+    ),
+    "debug_code": CoachingAction(
+        key="debug_code",
+        label="Debug My Code",
+        response_style="debugging_guidance",
+        prompt_instruction="Point to the most suspicious area and suggest a tiny test case without rewriting the solution.",
+    ),
+    "review_thinking": CoachingAction(
+        key="review_thinking",
+        label="Review My Thinking",
+        response_style="thinking_review",
+        prompt_instruction="Review the learner's reasoning process, decision points, and assumptions.",
+    ),
+    "vocabulary_hint": CoachingAction(
+        key="vocabulary_hint",
+        label="Vocabulary Hint",
+        response_style="vocabulary_guidance",
+        prompt_instruction="Explain important vocabulary clues without translating the whole passage or giving the answer.",
+    ),
+    "grammar_explanation": CoachingAction(
+        key="grammar_explanation",
+        label="Grammar Explanation",
+        response_style="grammar_guidance",
+        prompt_instruction="Explain the grammar pattern needed to reason about the question.",
+    ),
+    "reading_guidance": CoachingAction(
+        key="reading_guidance",
+        label="Reading Guidance",
+        response_style="reading_strategy",
+        prompt_instruction="Guide how to read the passage, identify structure, and eliminate traps.",
+    ),
+}
+
+
 class HintService:
     def __init__(self, session, openai_client: Any | None = None) -> None:
         self.session = session
@@ -96,6 +186,72 @@ class HintService:
             "problem_id": context.problem_id,
             "external_problem_id": context.external_problem_id,
         }
+
+    def coach(
+        self,
+        context: ProblemContext,
+        *,
+        action: str = "generate_hint",
+        user_question: str = "",
+        execution_trace: dict[str, Any] | None = None,
+        current_step: str = "",
+        reflection: dict[str, Any] | None = None,
+        hint_level: int | None = None,
+    ) -> dict[str, Any]:
+        normalized_action = action if action in COACHING_ACTIONS else "ask_coach"
+        if normalized_action == "generate_hint":
+            result = self.generate_hint(context, hint_level=hint_level)
+            result["action"] = normalized_action
+            result["label"] = COACHING_ACTIONS[normalized_action].label
+            result["response"] = result["hint"]
+            return result
+
+        prompt = self._build_coaching_prompt(
+            context,
+            COACHING_ACTIONS[normalized_action],
+            user_question=user_question,
+            execution_trace=execution_trace,
+            current_step=current_step,
+            reflection=reflection,
+        )
+        raw_response = self._call_gemini(prompt)
+        response = self._normalize_hint(raw_response, context, hint_level or context.hint_level or 1)
+        return {
+            "action": normalized_action,
+            "label": COACHING_ACTIONS[normalized_action].label,
+            "response": response,
+            "hint": response,
+            "hint_level": hint_level or context.hint_level,
+            "source_platform": context.source_platform,
+            "problem_id": context.problem_id,
+            "external_problem_id": context.external_problem_id,
+        }
+
+    def _build_coaching_prompt(
+        self,
+        context: ProblemContext,
+        action: CoachingAction,
+        *,
+        user_question: str = "",
+        execution_trace: dict[str, Any] | None = None,
+        current_step: str = "",
+        reflection: dict[str, Any] | None = None,
+    ) -> str:
+        base_prompt = self._build_prompt(context, context.hint_level or 1)
+        return "\n".join(
+            [
+                base_prompt,
+                "",
+                f"Coaching action: {action.label}",
+                f"Response style: {action.response_style}",
+                action.prompt_instruction,
+                f"Learner question: {self._normalize_optional_text(user_question) or 'Not provided'}",
+                f"Current learning step: {self._normalize_optional_text(current_step) or 'Not provided'}",
+                f"Execution trace: {self._normalize_optional_text(execution_trace) or 'Not provided'}",
+                f"Reflection: {self._normalize_optional_text(reflection) or 'Not provided'}",
+                "Guide without revealing the final answer.",
+            ]
+        )
 
     def list_hint_history(self) -> list[dict[str, Any]]:
         records = self.session.query(HintHistory).order_by(HintHistory.created_at.desc()).all()
