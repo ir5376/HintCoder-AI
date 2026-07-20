@@ -7,6 +7,12 @@ import streamlit as st
 
 from src.services.hint_service import HintService, ProblemContext
 from src.services.problem_service import ProblemService
+from src.ui.components.solution_link_review import SolutionActionCallback, render_solution_link_review
+from src.ui.components.solution_link_view_models import (
+    SolutionLinkReviewViewModel,
+    SolutionLinkStatus,
+    SolutionSourceStatus,
+)
 
 try:
     from streamlit_ace import st_ace
@@ -98,7 +104,13 @@ def render_problem_detail(service: ProblemService, problem_id: int | str | None,
         on_start_learning()
 
 
-def render_learning_workspace(service: ProblemService, problem_id: int | str | None, hint_service: HintService | None = None) -> None:
+def render_learning_workspace(
+    service: ProblemService,
+    problem_id: int | str | None,
+    hint_service: HintService | None = None,
+    solution_review: SolutionLinkReviewViewModel | None = None,
+    on_solution_action: SolutionActionCallback | None = None,
+) -> None:
     problem = _problem_or_error(service, problem_id)
     if not problem:
         return
@@ -162,6 +174,15 @@ def render_learning_workspace(service: ProblemService, problem_id: int | str | N
         if right.button("Mark reviewed", key=f"mark_reviewed_{problem['id']}", use_container_width=True):
             _set_review_status(problem, "Reviewed")
             st.rerun()
+        render_solution_link_review(
+            solution_review
+            or SolutionLinkReviewViewModel(
+                question_id=str(problem["id"]),
+                link_status=SolutionLinkStatus.NO_SOLUTION,
+                source_status=SolutionSourceStatus.PENDING,
+            ),
+            on_solution_action,
+        )
     with tabs[4]:
         key = f"quiz_{problem['id']}"
         st.text_area("Your answer", key=key, height=100)
