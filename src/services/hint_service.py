@@ -10,11 +10,29 @@ from typing import Any, Optional
 from dotenv import load_dotenv
 
 from src.config import get_settings
-from src.learning_engine.domain import LearningContext
 from src.models.hint import HintHistory
 from src.models.problem import Problem
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
+
+@dataclass(frozen=True)
+class LearningContext:
+    current_approach: str = ""
+    current_obstacle: str = ""
+    intended_algorithm: str = ""
+    desired_hint_level: int = 1
+    confidence_level: float | None = None
+
+    def to_prompt_lines(self) -> list[str]:
+        confidence = "Not provided" if self.confidence_level is None else str(self.confidence_level)
+        return [
+            f"- Current approach: {self.current_approach or 'Not provided'}",
+            f"- Current obstacle: {self.current_obstacle or 'Not provided'}",
+            f"- Intended algorithm: {self.intended_algorithm or 'Not provided'}",
+            f"- Desired hint level: {self.desired_hint_level}",
+            f"- Confidence level: {confidence}",
+        ]
 
 
 @dataclass
