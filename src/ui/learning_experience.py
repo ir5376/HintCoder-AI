@@ -32,11 +32,11 @@ def inject_learning_styles() -> None:
 
 def render_home(on_open_library: Callable[[], None]) -> None:
     history = list(st.session_state.get("hint_history", []))
-    st.markdown('<div class="hc-eyebrow">Learning home</div><div class="hc-title">Make one useful move today.</div><p class="hc-lede">Understand, attempt, reflect, then return when it matters.</p>', unsafe_allow_html=True)
+    st.markdown('<div class="hc-eyebrow">Learning home</div><div class="hc-title">Learn from what you collect.</div><p class="hc-lede">Add a source, make an attempt, and return when it matters.</p>', unsafe_allow_html=True)
     left, right = st.columns([1.35, 1])
     with left:
         st.markdown('<div class="hc-mission"><div class="hc-label" style="color:#c9deed">Today\'s mission</div><h3>Work through one problem with intention.</h3><p>Read the problem, make an attempt, and ask for a progressive hint only when you need a nudge.</p></div>', unsafe_allow_html=True)
-        if st.button("Browse learning items", type="primary", use_container_width=True):
+        if st.button("Browse learning sources", type="primary", use_container_width=True):
             on_open_library()
         st.markdown("#### Review queue")
         st.markdown('<div class="hc-card"><b>Nothing scheduled for review</b><p class="hc-muted">Reflections and completed learning items will appear here when review scheduling is available.</p></div>', unsafe_allow_html=True)

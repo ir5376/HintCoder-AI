@@ -17,7 +17,7 @@ def _rerun_after(action) -> None:
 
 def _render_navigation() -> None:
     page = current_page()
-    label = {HOME: "Home", LIBRARY: "Problem Library", DETAIL: "Problem Detail", LEARNING: "Learning"}[page]
+    label = {HOME: "Home", LIBRARY: "Learning Sources", DETAIL: "Learning Item", LEARNING: "Learning Item"}[page]
     left, right = st.columns([1, 5])
     with left:
         if page == HOME:
@@ -42,7 +42,7 @@ def main() -> None:
         st.sidebar.caption("An AI learning OS for deliberate practice")
         if st.sidebar.button("Home", use_container_width=True):
             _rerun_after(lambda: navigate(HOME))
-        if st.sidebar.button("Problem library", use_container_width=True):
+        if st.sidebar.button("Learning Sources", use_container_width=True):
             _rerun_after(lambda: navigate(LIBRARY))
         st.sidebar.divider()
         st.sidebar.caption(f"Provider: {st.session_state['selected_provider']}")

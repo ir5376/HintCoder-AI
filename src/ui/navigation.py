@@ -30,9 +30,12 @@ def initialize() -> None:
     sync_url()
 
 
-def _coerce_problem_id(value: object) -> int | None:
+def _coerce_problem_id(value: object) -> int | str | None:
     try:
-        return int(str(value)) if value is not None else None
+        raw_value = str(value) if value is not None else ""
+        if not raw_value:
+            return None
+        return int(raw_value) if raw_value.isdigit() else raw_value
     except (TypeError, ValueError):
         return None
 
@@ -41,7 +44,7 @@ def current_page() -> str:
     return st.session_state["nav_stack"][-1]
 
 
-def navigate(page: str, *, problem_id: int | None = None, provider: str | None = None) -> None:
+def navigate(page: str, *, problem_id: int | str | None = None, provider: str | None = None) -> None:
     if page not in _VALID_PAGES:
         raise ValueError(f"Unknown HintCode page: {page}")
     if problem_id is not None:
