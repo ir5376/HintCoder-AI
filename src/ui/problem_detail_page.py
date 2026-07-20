@@ -1,5 +1,3 @@
-import traceback
-
 import streamlit as st
 
 from src.services.hint_service import HintService, ProblemContext
@@ -141,9 +139,8 @@ def render_problem_detail(
                 )
                 result = hint_service.generate_hint(context, hint_level=hint_level)
             except Exception as exc:
-                traceback.print_exc()
-                st.error("Sorry, I could not generate a hint right now. Please try again.")
-                st.caption(f"Exception type: {type(exc).__name__}")
+                st.error(str(exc) or "Sorry, I could not generate a hint right now. Please try again.")
+                st.caption("If the issue continues, check your Gemini model setting and API key.")
                 return
 
         if result.get("hint"):

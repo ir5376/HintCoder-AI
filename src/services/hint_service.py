@@ -9,6 +9,7 @@ from typing import Any, Optional
 
 from dotenv import load_dotenv
 
+from src.config import get_settings
 from src.models.hint import HintHistory
 from src.models.problem import Problem
 
@@ -178,7 +179,12 @@ class HintService:
             return None
 
         try:
-            model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+            model_name = self._get_gemini_model_name()
+            if not model_name:
+                raise RuntimeError(
+                    "No Gemini model is configured for this environment. "
+                    "Please set GEMINI_MODEL to a model that has working generation quota."
+                )
             if hasattr(client, "models") and hasattr(client.models, "generate_content"):
                 response = client.models.generate_content(
                     model=model_name,
@@ -192,11 +198,35 @@ class HintService:
 
             raise RuntimeError("Unexpected Gemini client interface")
         except Exception as exc:
+            message = self._format_gemini_error_message(exc)
             print(f"[HintService] Gemini request failed: {type(exc).__name__}: {exc}")
-            traceback.print_exc()
-            return None
+            raise RuntimeError(message) from exc
 
-        return None
+    def _get_gemini_model_name(self) -> str:
+        settings = get_settings()
+        configured = os.environ.get("GEMINI_MODEL") or settings.gemini_model
+        if configured:
+            return configured
+        return ""
+
+    def get_available_gemini_model_name(self) -> str:
+        return self._get_gemini_model_name()
+
+    def _format_gemini_error_message(self, exc: Exception) -> str:
+        message = str(exc).lower()
+        if "429" in message or "resource_exhausted" in message or "quota" in message or "limit: 0" in message:
+            return (
+                "The current Gemini API project has no available quota for text generation right now. "
+                "Please wait for quota to be replenished or use a different API project/account."
+            )
+        if "404" in message or "not_found" in message or "unavailable" in message:
+            return (
+                "The selected Gemini model is currently unavailable for this account. "
+                "Please update GEMINI_MODEL to a supported model after confirming it works with the diagnostic script."
+            )
+        if "api key" in message or "authentication" in message or "permission" in message:
+            return "The Gemini API key appears to be invalid or missing. Please verify GEMINI_API_KEY in your environment."
+        return "The Gemini service could not generate a hint right now. Please try again in a moment."
 
     def _extract_response_text(self, response: Any) -> Optional[str]:
         if response is None:
