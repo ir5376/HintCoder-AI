@@ -10,27 +10,47 @@ async function getCurrentTabInfo() {
   return tab;
 }
 
+function sendMessageToTab(tabId, message) {
+  return new Promise((resolve) => {
+    chrome.tabs.sendMessage(tabId, message, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve(null);
+        return;
+      }
+      resolve(response);
+    });
+  });
+}
+
 async function loadInfo() {
   try {
     const tab = await getCurrentTabInfo();
     if (!tab || !tab.url) {
-      showMessage('Open a Programmers problem page to continue.');
+      showMessage('Open a supported coding problem page to continue.');
       return;
     }
 
-    const url = new URL(tab.url);
-    const isProgrammersPage = url.hostname === 'school.programmers.co.kr';
+    const provider = detectProvider(tab.url);
 
-    if (!isProgrammersPage) {
-      showMessage('This page is not a Programmers problem page.');
+    if (!provider) {
+      showMessage('This page is not a supported coding problem page.');
       return;
     }
 
-    const title = tab.title || 'Unknown problem';
-    showMessage(`Problem: ${title}\nURL: ${tab.url}`);
+    const response = await sendMessageToTab(tab.id, { type: 'GET_PROBLEM_INFO' });
+    const problem = response?.problem || {
+      provider,
+      problem_id: '',
+      title: tab.title || 'Unknown problem',
+      url: tab.url,
+      language: '',
+      starter_code: '',
+      metadata: {},
+    };
+
+    showMessage(`Provider: ${problem.provider}\nProblem: ${problem.title}\nURL: ${problem.url}`);
     openButton.disabled = false;
-    openButton.dataset.problemTitle = title;
-    openButton.dataset.problemUrl = tab.url;
+    openButton.dataset.problem = JSON.stringify(problem);
   } catch (error) {
     console.error(error);
     showMessage('Unable to read the current page.');
@@ -38,17 +58,19 @@ async function loadInfo() {
 }
 
 function openHintCode() {
-  const title = openButton.dataset.problemTitle || '';
-  const problemUrl = openButton.dataset.problemUrl || '';
+  const problem = JSON.parse(openButton.dataset.problem || '{}');
 
-  if (!title && !problemUrl) {
+  if (!problem.title && !problem.url) {
     showMessage('No problem information available.');
     return;
   }
 
   const hintCodeUrl = new URL('http://localhost:8501');
-  hintCodeUrl.searchParams.set('problem_title', title);
-  hintCodeUrl.searchParams.set('problem_url', problemUrl);
+  hintCodeUrl.searchParams.set('provider', problem.provider || '');
+  hintCodeUrl.searchParams.set('problem_id', problem.problem_id || '');
+  hintCodeUrl.searchParams.set('problem_title', problem.title || '');
+  hintCodeUrl.searchParams.set('problem_url', problem.url || '');
+  hintCodeUrl.searchParams.set('language', problem.language || '');
 
   window.open(hintCodeUrl.toString(), '_blank', 'noopener,noreferrer');
 }

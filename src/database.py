@@ -10,6 +10,16 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.models.base import Base
+from src.models.learning_os import (
+    Assessment,
+    LearningAttempt,
+    LearningHistoryEvent,
+    LearningItem,
+    LearningReflection,
+    ProviderRecord,
+    ReviewQueueItem,
+    WeaknessAnalysis,
+)
 from src.models.problem import Problem
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -99,19 +109,57 @@ def _seed_database(engine: Engine) -> None:
     seen_keys: set[tuple] = set()
 
     with SessionLocal.begin() as session:
-        session.query(Problem).delete(synchronize_session=False)
+        session.query(Problem).filter(
+            (Problem.source_type.is_(None)) | (Problem.source_type == "")
+        ).delete(synchronize_session=False)
         if engine.dialect.name == "sqlite":
             try:
-                session.execute(text("DELETE FROM sqlite_sequence WHERE name='problems'"))
+                if session.query(Problem).count() == 0:
+                    session.execute(text("DELETE FROM sqlite_sequence WHERE name='problems'"))
             except Exception:
                 pass
 
         for item in combined_items:
-            key = (item.get("id"), item.get("title"), item.get("function_name"))
+            key = (
+                item.get("source_type", ""),
+                item.get("source_reference", ""),
+                item.get("function_name"),
+            )
             if key in seen_keys:
                 continue
             seen_keys.add(key)
-            session.add(Problem.from_dict(item))
+
+            existing = (
+                session.query(Problem)
+                .filter(
+                    Problem.source_type == item.get("source_type", ""),
+                    Problem.source_reference == item.get("source_reference", ""),
+                    Problem.function_name == item.get("function_name"),
+                )
+                .order_by(Problem.id)
+                .first()
+            )
+            if existing is None:
+                session.add(Problem.from_dict(item))
+            else:
+                _update_problem_from_item(existing, item)
+
+
+def _update_problem_from_item(problem: Problem, item: dict) -> None:
+    incoming = Problem.from_dict(item)
+    problem.title = incoming.title
+    problem.description = incoming.description
+    problem.category = incoming.category
+    problem.difficulty = incoming.difficulty
+    problem.problem_type = incoming.problem_type
+    problem.function_name = incoming.function_name
+    problem.starter_code = incoming.starter_code
+    problem.constraints = incoming.constraints
+    problem.test_cases = incoming.test_cases
+    problem.explanation = incoming.explanation
+    problem.source_type = incoming.source_type
+    problem.source_reference = incoming.source_reference
+    problem.tags = incoming.tags
 
 
 class ProblemDatabase:

@@ -81,7 +81,7 @@ def render_home() -> None:
         st.markdown('<div class="hc-mission hc-done"><b>✓ Warm-up: spot a duplicate</b><br><small>Arrays · completed · +15 XP</small></div>', unsafe_allow_html=True)
         st.markdown('<div class="hc-mission"><b>Graph: find connected components</b><br><small>25–35 min · +60 XP · Recommended next</small></div>', unsafe_allow_html=True)
         if st.button("Start today’s path", type="primary", key="home_start"):
-            st.session_state["learning_page"] = "Today"
+            st.session_state["pending_learning_page"] = "Today"
             st.rerun()
         st.markdown("#### 📚 Review queue")
         for title, due in [("Two Sum", "Due today"), ("Valid Parentheses", "Due today"), ("Number of Islands", "Tomorrow")]:

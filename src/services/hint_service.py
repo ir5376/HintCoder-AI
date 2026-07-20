@@ -10,6 +10,7 @@ from typing import Any, Optional
 from dotenv import load_dotenv
 
 from src.config import get_settings
+from src.learning_engine.domain import LearningContext
 from src.models.hint import HintHistory
 from src.models.problem import Problem
 
@@ -31,6 +32,7 @@ class ProblemContext:
     execution_result: str = ""
     hint_level: int = 1
     problem_id: Optional[int] = None
+    learning_context: LearningContext | None = None
 
 
 class HintService:
@@ -63,6 +65,7 @@ class HintService:
         programming_language: str = "Python",
         execution_result: str = "",
         hint_level: int = 1,
+        learning_context: LearningContext | None = None,
     ) -> ProblemContext:
         examples = self._normalize_optional_text(problem.test_cases)
         return ProblemContext(
@@ -79,6 +82,7 @@ class HintService:
             execution_result=execution_result,
             hint_level=hint_level,
             problem_id=problem.id,
+            learning_context=learning_context,
         )
 
     def generate_hint(self, context: ProblemContext, hint_level: int | None = None) -> dict[str, Any]:
@@ -122,6 +126,7 @@ class HintService:
         examples = self._normalize_optional_text(context.examples)
         student_code = self._normalize_optional_text(context.student_code)
         execution_result = self._normalize_optional_text(context.execution_result)
+        learning_context = context.learning_context or LearningContext(desired_hint_level=hint_level)
 
         instructions = [
             "You are an English-speaking coding tutor.",
@@ -167,6 +172,8 @@ class HintService:
             f"- Programming language: {self._normalize_optional_text(context.programming_language) or 'Python'}",
             f"- Student code: {student_code or 'Not provided'}",
             f"- Execution result: {execution_result or 'Not provided'}",
+            "Learning context:",
+            *learning_context.to_prompt_lines(),
             "",
             "Return only one short English hint that is progressive, educational, and safe.",
             "Do not include a full solution, a copy-paste-ready code block, or a complete function implementation.",

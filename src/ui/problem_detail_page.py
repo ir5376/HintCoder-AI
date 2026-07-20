@@ -1,5 +1,6 @@
 import streamlit as st
 
+from src.learning_engine.domain import LearningContext
 from src.services.hint_service import HintService, ProblemContext
 from src.services.problem_service import ProblemService
 
@@ -15,6 +16,7 @@ def build_hint_context(
     student_code: str = "",
     programming_language: str = "Python",
     hint_level: int = 1,
+    learning_context: LearningContext | None = None,
 ) -> ProblemContext:
     return ProblemContext(
         source_platform="HintCode",
@@ -28,6 +30,7 @@ def build_hint_context(
         student_code=student_code or problem.get("starter_code", "") or "",
         hint_level=hint_level,
         problem_id=problem.get("id"),
+        learning_context=learning_context,
     )
 
 
@@ -56,11 +59,41 @@ def _render_code_editor(label: str, value: str, key: str, *, language: str = "py
     return st.text_area(label, value=value, height=250, key=key)
 
 
+def _render_provider_badge(problem: dict) -> None:
+    tags = problem.get("tags") or {}
+    provider_metadata = tags if isinstance(tags, dict) else {}
+    provider = provider_metadata.get("provider") or problem.get("source_type")
+    if not provider or provider == "Example":
+        return
+
+    language = provider_metadata.get("language") or "Unknown"
+    difficulty = provider_metadata.get("difficulty") or problem.get("difficulty") or "Unknown"
+    original_url = provider_metadata.get("original_url") or problem.get("source_reference") or ""
+    import_time = provider_metadata.get("import_time") or "Unknown"
+
+    col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
+    col1.caption(f"Provider: {provider}")
+    col2.caption(f"Difficulty: {difficulty}")
+    col3.caption(f"Language: {language}")
+    col4.caption(f"Import Time: {import_time}")
+    if original_url:
+        st.link_button("Original URL", original_url)
+
+
 def render_problem_detail(
     service: ProblemService,
     problem_id: int | None = None,
     hint_service: HintService | None = None,
+    show_back_button: bool = False,
 ) -> None:
+    if show_back_button:
+        if st.button("Back to Library"):
+            st.session_state["show_problem_detail_back_button"] = False
+            st.session_state["show_problem_library"] = True
+            st.session_state["current_view"] = "library"
+            st.session_state["suppress_detail_query"] = True
+            st.rerun()
+
     st.subheader("Problem Details")
 
     if problem_id is None:
@@ -73,6 +106,7 @@ def render_problem_detail(
         return
 
     st.markdown(f"## {problem['id']}. {problem['title']}")
+    _render_provider_badge(problem)
     st.write(f"**Category:** {problem['category']}  |  **Difficulty:** {problem['difficulty']}")
     st.write(f"**Problem Type:** {problem['problem_type']}")
     st.write(f"**Function name:** `{problem['function_name']}`")
@@ -99,6 +133,12 @@ def render_problem_detail(
         programming_language = st.selectbox("Programming language", ["Python", "JavaScript", "Java", "C++"], index=0)
     with col2:
         hint_level = st.selectbox("Hint level", [1, 2, 3, 4], index=0)
+
+    with st.expander("Learning Context", expanded=True):
+        current_approach = st.text_area("Current approach", value="", height=80)
+        current_obstacle = st.text_area("Current obstacle", value="", height=80)
+        intended_algorithm = st.text_input("Intended algorithm", value="")
+        confidence_level = st.slider("Confidence level", min_value=0.0, max_value=1.0, value=0.5, step=0.1)
 
     templates = {
         "Python": problem.get("starter_code", "") or "",
@@ -136,6 +176,13 @@ def render_problem_detail(
                     student_code=student_code,
                     programming_language=programming_language,
                     hint_level=hint_level,
+                    learning_context=LearningContext(
+                        current_approach=current_approach,
+                        current_obstacle=current_obstacle,
+                        intended_algorithm=intended_algorithm,
+                        desired_hint_level=hint_level,
+                        confidence_level=confidence_level,
+                    ),
                 )
                 result = hint_service.generate_hint(context, hint_level=hint_level)
             except Exception as exc:

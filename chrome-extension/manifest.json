@@ -2,17 +2,30 @@
   "manifest_version": 3,
   "name": "HintCode Problem Helper",
   "version": "1.0.0",
-  "description": "Reads Programmers problem information and opens HintCode with the problem details.",
+  "description": "Reads supported coding-platform problem metadata and opens HintCode with provider-independent details.",
   "permissions": ["activeTab", "scripting"],
-  "host_permissions": ["https://school.programmers.co.kr/*", "http://localhost:8501/*"],
+  "host_permissions": [
+    "https://leetcode.com/*",
+    "https://school.programmers.co.kr/*",
+    "https://www.acmicpc.net/*",
+    "https://codeforces.com/*",
+    "https://atcoder.jp/*",
+    "http://localhost:8501/*"
+  ],
   "action": {
     "default_title": "HintCode Problem Helper",
     "default_popup": "popup.html"
   },
   "content_scripts": [
     {
-      "matches": ["https://school.programmers.co.kr/*"],
-      "js": ["content.js"]
+      "matches": [
+        "https://leetcode.com/*",
+        "https://school.programmers.co.kr/*",
+        "https://www.acmicpc.net/*",
+        "https://codeforces.com/*",
+        "https://atcoder.jp/*"
+      ],
+      "js": ["provider-detector.js", "provider-adapters.js", "content.js"]
     }
   ]
 }

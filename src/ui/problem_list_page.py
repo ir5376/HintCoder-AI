@@ -4,6 +4,12 @@ from src.services.problem_service import ProblemService
 
 
 def render_problem_list(service: ProblemService) -> None:
+    if st.button("Back to Home"):
+        st.session_state["show_problem_library"] = False
+        st.session_state["current_view"] = "home"
+        st.session_state["pending_learning_page"] = "Home"
+        st.rerun()
+
     filters = service.get_filters()
     category = st.sidebar.selectbox("Category", ["All"] + filters["categories"])
     difficulty = st.sidebar.selectbox("Difficulty", ["All"] + filters["difficulties"])
