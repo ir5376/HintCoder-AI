@@ -1,0 +1,31 @@
+from src.models.learning_item import (
+    AnswerRecord,
+    ExamSource,
+    KnowledgeEntry,
+    LearningActivity,
+    LearningArtifact,
+    LearningAttempt,
+    LearningHistory,
+    LearningItem,
+    LearningReviewQueue,
+    PassageGroup,
+    ProviderSubmissionResult,
+    UserProfile,
+    XpEvent,
+)
+
+__all__ = [
+    "AnswerRecord",
+    "ExamSource",
+    "KnowledgeEntry",
+    "LearningActivity",
+    "LearningArtifact",
+    "LearningAttempt",
+    "LearningHistory",
+    "LearningItem",
+    "LearningReviewQueue",
+    "PassageGroup",
+    "ProviderSubmissionResult",
+    "UserProfile",
+    "XpEvent",
+]

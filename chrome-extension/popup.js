@@ -19,16 +19,20 @@ async function loadInfo() {
     }
 
     const url = new URL(tab.url);
-    const isProgrammersPage = url.hostname === 'school.programmers.co.kr';
+    const detected = globalThis.HintCodeProviderAdapters.detect(url);
 
-    if (!isProgrammersPage) {
-      showMessage('This page is not a Programmers problem page.');
+    if (!detected) {
+      showMessage('Open a LeetCode or Programmers problem page to continue.');
       return;
     }
 
+    const provider = detected.provider;
+    const providerProblemId = detected.adapter.problemId(url);
     const title = tab.title || 'Unknown problem';
     showMessage(`Problem: ${title}\nURL: ${tab.url}`);
     openButton.disabled = false;
+    openButton.dataset.provider = provider;
+    openButton.dataset.providerProblemId = providerProblemId;
     openButton.dataset.problemTitle = title;
     openButton.dataset.problemUrl = tab.url;
   } catch (error) {
@@ -38,6 +42,8 @@ async function loadInfo() {
 }
 
 function openHintCode() {
+  const provider = openButton.dataset.provider || '';
+  const providerProblemId = openButton.dataset.providerProblemId || '';
   const title = openButton.dataset.problemTitle || '';
   const problemUrl = openButton.dataset.problemUrl || '';
 
@@ -47,6 +53,13 @@ function openHintCode() {
   }
 
   const hintCodeUrl = new URL('http://localhost:8501');
+  if (provider) {
+    hintCodeUrl.searchParams.set('provider', provider);
+  }
+  if (providerProblemId) {
+    hintCodeUrl.searchParams.set('problem_id', providerProblemId);
+    hintCodeUrl.searchParams.set('provider_problem_id', providerProblemId);
+  }
   hintCodeUrl.searchParams.set('problem_title', title);
   hintCodeUrl.searchParams.set('problem_url', problemUrl);
 

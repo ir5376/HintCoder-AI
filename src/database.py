@@ -10,6 +10,21 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.models.base import Base
+from src.models.learning_item import (
+    AnswerRecord,
+    ExamSource,
+    KnowledgeEntry,
+    LearningActivity,
+    LearningArtifact,
+    LearningAttempt,
+    LearningHistory,
+    LearningItem,
+    LearningReviewQueue,
+    PassageGroup,
+    ProviderSubmissionResult,
+    UserProfile,
+    XpEvent,
+)
 from src.models.problem import Problem
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
