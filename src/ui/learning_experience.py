@@ -26,7 +26,8 @@ def inject_learning_styles() -> None:
       .hc-item { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:.8rem 0; border-bottom:1px solid #edf1f5; }
       .hc-item:last-child { border-bottom:0; }
       .hc-chip { color:#315c82; background:#eaf2f8; border-radius:999px; font-size:.78rem; font-weight:700; padding:.25rem .55rem; white-space:nowrap; }
-      @media(max-width: 640px) { .block-container { padding:1.25rem 1rem 2rem; } .hc-mission { padding:1.15rem; } }
+      @media(max-width: 900px) { .block-container { padding-left:1.25rem; padding-right:1.25rem; } }
+      @media(max-width: 640px) { .block-container { padding:1.25rem 1rem 2rem; } .hc-mission { padding:1.15rem; } .hc-card { padding:1rem; } .hc-item { align-items:flex-start; flex-direction:column; gap:.55rem; } .hc-chip { align-self:flex-start; } }
     </style>""", unsafe_allow_html=True)
 
 

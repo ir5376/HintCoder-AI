@@ -55,6 +55,16 @@ def _problem_or_error(service: ProblemService, problem_id: int | str | None) -> 
     return problem
 
 
+def _review_status(problem: dict) -> str:
+    return st.session_state.get("review_statuses", {}).get(problem["id"], problem.get("review_status", "Not reviewed"))
+
+
+def _set_review_status(problem: dict, status: str) -> None:
+    statuses = dict(st.session_state.get("review_statuses", {}))
+    statuses[problem["id"]] = status
+    st.session_state["review_statuses"] = statuses
+
+
 def render_problem_detail(service: ProblemService, problem_id: int | str | None, on_start_learning: Callable[[], None]) -> None:
     problem = _problem_or_error(service, problem_id)
     if problem is None:
@@ -64,7 +74,7 @@ def render_problem_detail(service: ProblemService, problem_id: int | str | None,
     st.markdown('<div class="hc-eyebrow">Learning Item</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="hc-title">{escape(str(problem["title"]))}</div><p class="hc-lede">A single, consistent learning space for every source type.</p>', unsafe_allow_html=True)
     fields = st.columns(5)
-    for column, label, value in zip(fields, ["Source", "Provider", "Difficulty", "Concepts", "Review Status"], [problem.get("source_type") or "Learning item", provider, problem.get("difficulty") or "To assess", concepts, problem.get("review_status", "Not reviewed")]):
+    for column, label, value in zip(fields, ["Source", "Provider", "Difficulty", "Concepts", "Status"], [problem.get("source_type") or "Learning item", provider, problem.get("difficulty") or "To assess", concepts, _review_status(problem)]):
         with column:
             st.markdown(f'<div class="hc-label">{label}</div><div class="hc-muted">{escape(str(value))}</div>', unsafe_allow_html=True)
     st.markdown("#### Problem")
@@ -89,7 +99,7 @@ def render_learning_workspace(service: ProblemService, problem_id: int | str | N
         return
     st.markdown('<div class="hc-eyebrow">Learning Item</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="hc-title">{escape(str(problem["title"]))}</div><p class="hc-lede">The same learning workflow, whatever the source.</p>', unsafe_allow_html=True)
-    tabs = st.tabs(["Problem", "Hint", "Memory Cards", "Review", "Quiz", "History", "Generate Similar Problem"])
+    tabs = st.tabs(["Problem", "Hint", "Memory Cards", "Review", "Quiz", "Generate Similar Problem"])
     templates = {
         "Python": problem.get("starter_code", "") or "",
         "JavaScript": "function solution() {\n    // Write your solution here\n}",
@@ -141,25 +151,63 @@ def render_learning_workspace(service: ProblemService, problem_id: int | str | N
     with tabs[2]:
         st.markdown("#### Memory Cards")
         st.markdown('<div class="hc-card"><b>Create a recall cue</b><p class="hc-muted">What signal tells you to use this concept? Add your answer after your first attempt.</p></div>', unsafe_allow_html=True)
-        st.text_area("Memory card", key=f"memory_card_{problem['id']}", placeholder="Front: When do I use this?  Back: ...", height=110)
+        card_key = f"memory_card_{problem['id']}"
+        clear_card_key = f"clear_memory_card_{problem['id']}"
+        if st.session_state.pop(clear_card_key, False):
+            st.session_state[card_key] = ""
+        st.text_area("Memory card", key=card_key, placeholder="Front: When do I use this?  Back: ...", height=110)
+        if st.button("Save memory card", key=f"save_memory_card_{problem['id']}"):
+            card = st.session_state.get(card_key, "").strip()
+            if card:
+                cards = dict(st.session_state.get("memory_cards", {}))
+                cards[problem["id"]] = [card, *cards.get(problem["id"], [])]
+                st.session_state["memory_cards"] = cards
+                st.session_state[clear_card_key] = True
+                st.session_state[f"memory_card_saved_{problem['id']}"] = True
+                st.rerun()
+            else:
+                st.warning("Write a recall cue before saving it.")
+        if st.session_state.pop(f"memory_card_saved_{problem['id']}", False):
+            st.success("Memory card saved.")
+        for index, card in enumerate(st.session_state.get("memory_cards", {}).get(problem["id"], []), start=1):
+            st.markdown(f'<div class="hc-card"><b>Card {index}</b><p class="hc-muted">{escape(card)}</p></div>', unsafe_allow_html=True)
     with tabs[3]:
         st.markdown("#### Review")
-        st.markdown('<div class="hc-card"><b>Not scheduled for review</b><p class="hc-muted">Review scheduling will appear here when it is connected to your learning record.</p></div>', unsafe_allow_html=True)
+        status = _review_status(problem)
+        st.markdown(f'<div class="hc-card"><b>{escape(status)}</b><p class="hc-muted">Choose when this item should return to your review queue.</p></div>', unsafe_allow_html=True)
+        review_a, review_b = st.columns(2)
+        with review_a:
+            if st.button("Schedule review", key=f"schedule_review_{problem['id']}", use_container_width=True):
+                _set_review_status(problem, "Ready for review")
+                st.rerun()
+        with review_b:
+            if st.button("Mark reviewed", key=f"mark_reviewed_{problem['id']}", use_container_width=True):
+                _set_review_status(problem, "Reviewed")
+                st.rerun()
     with tabs[4]:
         st.markdown("#### Quiz")
         st.markdown('<div class="hc-card"><b>Check your understanding</b><p class="hc-muted">Explain the first decision you would make before looking at a solution.</p></div>', unsafe_allow_html=True)
-        st.text_area("Your answer", key=f"quiz_{problem['id']}", height=100)
+        quiz_key = f"quiz_{problem['id']}"
+        st.text_area("Your answer", key=quiz_key, height=100)
+        if st.button("Check answer", key=f"check_quiz_{problem['id']}"):
+            answer = st.session_state.get(quiz_key, "").strip()
+            if not answer:
+                st.warning("Write your reasoning before checking it.")
+            else:
+                st.session_state[f"quiz_feedback_{problem['id']}"] = "Saved. Compare your decision with the concept and constraints before continuing."
+        if feedback := st.session_state.get(f"quiz_feedback_{problem['id']}"):
+            st.success(feedback)
     with tabs[5]:
-        st.markdown("#### History")
-        history = list(st.session_state.get("hint_history", []))
-        if history:
-            for entry in history[:5]:
-                st.markdown(f'<div class="hc-card"><b>{entry["problem_title"]}</b><p class="hc-muted">Hint level {entry["hint_level"]} · {entry["programming_language"]}</p></div>', unsafe_allow_html=True)
-        else:
-            st.caption("Your hints and reviews will appear here.")
-    with tabs[6]:
         st.markdown("#### Generate Similar Problem")
-        st.markdown('<div class="hc-card"><b>Coming next</b><p class="hc-muted">Similar practice will be generated from the concepts in this learning item.</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="hc-card"><b>Practice the same idea again</b><p class="hc-muted">Generate a fresh prompt that keeps this item\'s concepts while changing the scenario.</p></div>', unsafe_allow_html=True)
+        if st.button("Generate similar problem", key=f"similar_problem_{problem['id']}", type="primary"):
+            concepts = ", ".join(problem.get("tags", []) or [problem["category"]])
+            st.session_state[f"similar_problem_{problem['id']}"] = (
+                f"Create a new {problem.get('difficulty', 'practice')} problem using {concepts}. "
+                f"Keep the core reasoning from \"{problem['title']}\", but use different inputs and an unfamiliar scenario."
+            )
+        if similar := st.session_state.get(f"similar_problem_{problem['id']}"):
+            st.markdown(f'<div class="hc-card"><b>Similar practice prompt</b><p class="hc-muted">{escape(similar)}</p></div>', unsafe_allow_html=True)
 
     history = list(st.session_state.get("hint_history", []))
     if not history and hint_service is not None:
