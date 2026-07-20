@@ -1,17 +1,23 @@
-const API_BASE_URL = 'http://localhost:8000';
+const resultByProblem = new Map();
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (!message || message.type !== 'SUBMISSION_RESULT' || !message.payload) {
-    return false;
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'HINTCODE_PROVIDER_RESULT') {
+    const payload = {...message.payload, receivedAt: Date.now()};
+    resultByProblem.set(`${payload.provider}:${payload.providerProblemId}`, payload);
+    chrome.runtime.sendMessage({type: 'HINTCODE_RESULT_UPDATED', payload}).catch(() => {});
+    sendResponse({ok: true});
+    return;
   }
-
-  fetch(`${API_BASE_URL}/provider-submissions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(message.payload),
-  })
-    .then((response) => sendResponse({ ok: response.ok }))
-    .catch((error) => sendResponse({ ok: false, error: String(error && error.message ? error.message : error) }));
-
-  return true;
+  if (message.type === 'HINTCODE_TRANSFER') {
+    chrome.tabs.query({url: message.originalUrl}).then((tabs) => {
+      const tab = tabs[0];
+      if (!tab) return sendResponse({ok: false, status: 'Transfer unsupported'});
+      chrome.tabs.update(tab.id, {active: true});
+      chrome.tabs.sendMessage(tab.id, message, (response) => sendResponse(response || {ok: false, status: 'Transfer unsupported'}));
+    });
+    return true;
+  }
+  if (message.type === 'HINTCODE_GET_RESULT') {
+    sendResponse(resultByProblem.get(`${message.provider}:${message.providerProblemId}`) || null);
+  }
 });

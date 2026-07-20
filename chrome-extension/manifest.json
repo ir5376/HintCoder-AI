@@ -1,27 +1,14 @@
 {
   "manifest_version": 3,
   "name": "HintCode Problem Helper",
-  "version": "1.0.0",
-  "description": "Reads coding provider problem information and syncs learning results with HintCode.",
-  "permissions": ["activeTab", "scripting"],
-  "host_permissions": [
-    "https://school.programmers.co.kr/*",
-    "https://programmers.co.kr/*",
-    "https://leetcode.com/*",
-    "http://localhost:8501/*",
-    "http://localhost:8000/*"
-  ],
-  "action": {
-    "default_title": "HintCode Problem Helper",
-    "default_popup": "popup.html"
-  },
-  "background": {
-    "service_worker": "background.js"
-  },
+  "version": "1.1.0",
+  "description": "Transfers an explicit learner draft and reports provider results to HintCode.",
+  "permissions": ["activeTab", "scripting", "tabs"],
+  "host_permissions": ["https://school.programmers.co.kr/*", "https://leetcode.com/*", "http://localhost:8501/*"],
+  "background": {"service_worker": "background.js"},
+  "action": {"default_title": "HintCode Problem Helper", "default_popup": "popup.html"},
   "content_scripts": [
-    {
-      "matches": ["https://school.programmers.co.kr/*", "https://programmers.co.kr/*", "https://leetcode.com/*"],
-      "js": ["provider_adapters.js", "content.js"]
-    }
+    {"matches": ["https://school.programmers.co.kr/*"], "js": ["programmers-content.js"]},
+    {"matches": ["https://leetcode.com/problems/*"], "js": ["leetcode-content.js"]}
   ]
 }
