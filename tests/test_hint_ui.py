@@ -1,6 +1,9 @@
 import src.ui.problem_detail_page as problem_detail_page
 from src.ui.problem_detail_page import build_hint_context
 from src.ui.problem_detail_page import _is_safe_external_url
+from src.ui.problem_detail_page import _build_external_problem_context
+from src.ui.problem_detail_page import _external_session_payload
+from src.ui.problem_detail_page import _reset_external_problem_state
 
 
 def test_build_hint_context_uses_problem_details_and_user_inputs():
@@ -51,3 +54,66 @@ def test_is_safe_external_url_accepts_only_http_urls():
     assert not _is_safe_external_url("javascript:alert(1)")
     assert not _is_safe_external_url("file:///C:/secret.txt")
     assert not _is_safe_external_url("school.programmers.co.kr/learn/courses/30/lessons/43165")
+
+
+def test_external_session_payload_saves_required_fields():
+    payload = _external_session_payload("Two Sum", "https://example.com/two-sum", 2)
+
+    assert payload == {
+        "problem_title": "Two Sum",
+        "problem_url": "https://example.com/two-sum",
+        "hint_level_used": 2,
+    }
+
+
+def test_build_external_problem_context_uses_external_problem_details():
+    context = _build_external_problem_context(
+        problem_title="Two Sum",
+        problem_url="https://example.com/two-sum",
+        student_code="def two_sum(nums, target):\n    pass",
+        hint_level=3,
+    )
+
+    assert context.source_platform == "External"
+    assert context.source_url == "https://example.com/two-sum"
+    assert context.external_problem_id == "https://example.com/two-sum"
+    assert context.title == "Two Sum"
+    assert context.problem_id is None
+    assert context.hint_level == 3
+    assert context.student_code.startswith("def two_sum")
+
+
+def test_reset_external_problem_state_initializes_session(monkeypatch):
+    fake_session_state = {}
+    fake_st = type("FakeSt", (), {"session_state": fake_session_state})()
+
+    monkeypatch.setattr(problem_detail_page, "st", fake_st)
+
+    _reset_external_problem_state("Two Sum", "https://example.com/two-sum")
+
+    assert fake_session_state["external_hint_level_used"] == 0
+    assert fake_session_state["external_hint_history"] == []
+    assert fake_session_state["external_code_editor"] == ""
+    assert fake_session_state["external_problem_session"] == {
+        "problem_title": "Two Sum",
+        "problem_url": "https://example.com/two-sum",
+        "hint_level_used": 0,
+    }
+
+
+def test_reset_external_problem_state_preserves_existing_same_problem(monkeypatch):
+    fake_session_state = {
+        "external_problem_key": "Two Sum\nhttps://example.com/two-sum",
+        "external_hint_level_used": 2,
+        "external_hint_history": [{"hint_level": 1}],
+        "external_code_editor": "print('keep')",
+    }
+    fake_st = type("FakeSt", (), {"session_state": fake_session_state})()
+
+    monkeypatch.setattr(problem_detail_page, "st", fake_st)
+
+    _reset_external_problem_state("Two Sum", "https://example.com/two-sum")
+
+    assert fake_session_state["external_hint_level_used"] == 2
+    assert fake_session_state["external_hint_history"] == [{"hint_level": 1}]
+    assert fake_session_state["external_code_editor"] == "print('keep')"

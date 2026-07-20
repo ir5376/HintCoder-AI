@@ -67,6 +67,141 @@ def _is_safe_external_url(url: str | None) -> bool:
     return parsed_url.scheme in {"http", "https"} and bool(parsed_url.netloc)
 
 
+EXTERNAL_HINT_LEVEL_LABELS = {
+    1: "Key concept",
+    2: "Algorithm direction",
+    3: "Pseudocode",
+    4: "Nearly complete implementation strategy",
+}
+
+
+def _external_session_payload(problem_title: str, problem_url: str, hint_level_used: int) -> dict:
+    return {
+        "problem_title": problem_title,
+        "problem_url": problem_url,
+        "hint_level_used": hint_level_used,
+    }
+
+
+def _reset_external_problem_state(problem_title: str, problem_url: str) -> None:
+    problem_key = f"{problem_title}\n{problem_url}"
+    if st.session_state.get("external_problem_key") == problem_key:
+        return
+
+    st.session_state["external_problem_key"] = problem_key
+    st.session_state["external_hint_level_used"] = 0
+    st.session_state["external_hint_history"] = []
+    st.session_state["external_code_editor"] = ""
+    st.session_state["external_problem_session"] = _external_session_payload(problem_title, problem_url, 0)
+
+
+def _build_external_problem_context(
+    *,
+    problem_title: str,
+    problem_url: str,
+    student_code: str,
+    programming_language: str = "Python",
+    hint_level: int = 1,
+) -> ProblemContext:
+    return ProblemContext(
+        source_platform="External",
+        source_url=problem_url,
+        external_problem_id=problem_url,
+        title=problem_title,
+        description="",
+        constraints="",
+        examples="",
+        difficulty="",
+        programming_language=programming_language,
+        student_code=student_code,
+        hint_level=hint_level,
+        problem_id=None,
+    )
+
+
+def render_external_problem_mode(
+    *,
+    hint_service: HintService | None,
+    problem_title: str,
+    problem_url: str,
+) -> None:
+    _reset_external_problem_state(problem_title, problem_url)
+
+    st.subheader("External Problem Mode")
+    st.markdown(f"## {problem_title}")
+    if _is_safe_external_url(problem_url):
+        st.link_button("Open original problem", problem_url)
+        st.caption(problem_url)
+    else:
+        st.caption("Original problem URL is invalid.")
+        st.code(problem_url)
+
+    st.markdown("### Code Editor")
+    student_code = _render_code_editor(
+        "Your code",
+        st.session_state.get("external_code_editor", ""),
+        "external_code_editor",
+        language="python",
+    )
+
+    hint_level_used = int(st.session_state.get("external_hint_level_used", 0))
+    next_hint_level = min(hint_level_used + 1, 4)
+    button_disabled = hint_level_used >= 4
+
+    if not button_disabled:
+        st.caption(f"Next: Hint Level {next_hint_level} - {EXTERNAL_HINT_LEVEL_LABELS[next_hint_level]}")
+
+    if st.button("Generate Hint", type="primary", disabled=button_disabled):
+        if hint_service is None:
+            st.error("Hint service is not available.")
+            return
+
+        with st.spinner("Generating a hint..."):
+            try:
+                context = _build_external_problem_context(
+                    problem_title=problem_title,
+                    problem_url=problem_url,
+                    student_code=student_code,
+                    hint_level=next_hint_level,
+                )
+                result = hint_service.generate_hint(context, hint_level=next_hint_level)
+            except Exception as exc:
+                traceback.print_exc()
+                st.error("Sorry, I could not generate a hint right now. Please try again.")
+                st.caption(f"Exception type: {type(exc).__name__}")
+                return
+
+        if result.get("hint"):
+            history = list(st.session_state.get("external_hint_history", []))
+            history.append(
+                {
+                    "hint_level": result.get("hint_level", next_hint_level),
+                    "label": EXTERNAL_HINT_LEVEL_LABELS.get(result.get("hint_level", next_hint_level), "Hint"),
+                    "generated_hint": result["hint"],
+                }
+            )
+            hint_level_used = max(hint_level_used, int(result.get("hint_level", next_hint_level)))
+            st.session_state["external_hint_history"] = history
+            st.session_state["external_hint_level_used"] = hint_level_used
+            st.session_state["external_problem_session"] = _external_session_payload(
+                problem_title,
+                problem_url,
+                hint_level_used,
+            )
+
+    st.markdown("### Progressive Hints")
+    history_entries = list(st.session_state.get("external_hint_history", []))
+    if history_entries:
+        for entry in history_entries:
+            st.markdown(f"#### Hint Level {entry['hint_level']} - {entry['label']}")
+            st.info(entry["generated_hint"])
+    else:
+        st.write("No hints generated yet.")
+
+    if int(st.session_state.get("external_hint_level_used", 0)) >= 4:
+        st.caption("All hint levels have been generated for this session.")
+
+
 def render_problem_detail(
     service: ProblemService,
     problem_id: int | None = None,

@@ -133,22 +133,22 @@ class HintService:
 
         if hint_level == 1:
             level_instruction = (
-                "Level 1: clarify what the problem is asking, identify an important concept, and ask a guiding question. "
+                "Level 1: reveal only the key concept needed to approach the problem and ask a guiding question. "
                 "Do not directly name the complete algorithm unless necessary."
             )
         elif hint_level == 2:
             level_instruction = (
-                "Level 2: suggest an algorithmic direction, mention useful data structures, and explain why the direction may work. "
+                "Level 2: reveal the algorithm direction, mention useful data structures, and explain why the direction may work. "
                 "Do not provide full pseudocode."
             )
         elif hint_level == 3:
             level_instruction = (
-                "Level 3: analyze the student's submitted code, identify likely logical or boundary-case issues, and provide a tiny partial pseudocode fragment. "
+                "Level 3: provide concise pseudocode for the main approach and point out likely edge cases in the student's submitted code. "
                 "Do not provide a complete executable solution."
             )
         else:
             level_instruction = (
-                "Level 4: provide a detailed solution outline, explain the key steps and complexity, and still avoid the final complete solution code."
+                "Level 4: provide a nearly complete implementation strategy, explain the key steps and complexity, and still avoid the final complete solution code."
             )
 
         prompt_parts = [
