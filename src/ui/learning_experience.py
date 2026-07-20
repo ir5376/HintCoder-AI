@@ -33,6 +33,7 @@ def inject_learning_styles() -> None:
 
 def render_home(on_open_library: Callable[[], None]) -> None:
     history = list(st.session_state.get("hint_history", []))
+    metrics = st.session_state.get("learner_metrics") if isinstance(st.session_state.get("learner_metrics"), dict) else {}
     st.markdown('<div class="hc-eyebrow">Learning home</div><div class="hc-title">Learn from what you collect.</div><p class="hc-lede">Add a source, make an attempt, and return when it matters.</p>', unsafe_allow_html=True)
     left, right = st.columns([1.35, 1])
     with left:
@@ -42,8 +43,11 @@ def render_home(on_open_library: Callable[[], None]) -> None:
         st.markdown("#### Review queue")
         st.markdown('<div class="hc-card"><b>Nothing scheduled for review</b><p class="hc-muted">Reflections and completed learning items will appear here when review scheduling is available.</p></div>', unsafe_allow_html=True)
     with right:
-        st.markdown('<div class="hc-card"><div class="hc-label">XP</div><div class="hc-value">Not available yet</div><div class="hc-muted">XP is shown once it is connected to your learning record.</div></div>', unsafe_allow_html=True)
-        st.markdown('<div class="hc-card"><div class="hc-label">Weakness</div><div class="hc-value">Still learning</div><div class="hc-muted">Complete attempts and reflections to reveal a focus area.</div></div>', unsafe_allow_html=True)
+        xp = metrics.get("current_xp", "Not available")
+        streak = metrics.get("current_streak", "Not available")
+        longest = metrics.get("longest_streak", "Not available")
+        st.markdown(f'<div class="hc-card"><div class="hc-label">XP</div><div class="hc-value">{xp}</div><div class="hc-muted">Current XP from your learning record.</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="hc-card"><div class="hc-label">Streak</div><div class="hc-value">{streak}</div><div class="hc-muted">Longest streak: {longest}</div></div>', unsafe_allow_html=True)
         progress = min(len(history) * 20, 100)
         plural = "s" if len(history) != 1 else ""
         st.markdown(f'<div class="hc-card"><div class="hc-label">Learning progress</div><div class="hc-value">{len(history)} hint{plural} explored</div><div class="hc-progress"><div style="width:{progress}%"></div></div><div class="hc-muted">Your current session activity</div></div>', unsafe_allow_html=True)

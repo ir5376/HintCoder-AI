@@ -8,46 +8,91 @@ from src.services.problem_service import ProblemService
 
 
 def _provider_for(problem: dict) -> str:
-    reference = problem.get("source_reference", "") or ""
-    host = urlparse(reference).netloc.lower()
+    host = urlparse(problem.get("source_reference", "") or "").netloc.lower()
     if "leetcode" in host:
         return "LeetCode"
     if "programmers" in host:
         return "Programmers"
-    if problem.get("source_type") == "Notes":
-        return "Personal notes"
-    if problem.get("source_type") == "PDF":
-        return "PDF import"
-    return problem.get("source_type") or "HintCode"
+    return {"Notes": "Personal notes", "PDF": "PDF import"}.get(problem.get("source_type"), problem.get("source_type") or "HintCode")
 
 
 def _add_source() -> str | None:
-    """Add the dialog's current source to this browser session.
-
-    Imported material deliberately stays in session state: importing a source
-    should not overwrite the seeded learning library when the app is restarted.
-    """
     source_type = st.session_state.get("new_source_type", "URL")
-    uploaded_pdf = st.session_state.get("source_pdf")
+    question_pdf = st.session_state.get("source_pdf")
+    answer_pdf = st.session_state.get("source_answer_pdf")
     value = st.session_state.get("source_url", "").strip() if source_type == "URL" else st.session_state.get("source_note", "").strip()
     if source_type == "URL" and not urlparse(value).scheme:
         return "Enter a complete URL, including http:// or https://."
-    if source_type == "PDF" and uploaded_pdf is None:
-        return "Choose a PDF before importing it."
+    if source_type == "PDF" and question_pdf is None:
+        return "Choose a question paper PDF before importing it."
     if source_type == "Notes" and not value:
         return "Add a note before importing it."
 
-    reference = value if source_type != "PDF" else uploaded_pdf.name
-    description = value or f"Imported PDF: {uploaded_pdf.name}"
-    default_name = urlparse(value).netloc if source_type == "URL" else getattr(uploaded_pdf, "name", "Untitled note")
-    name = st.session_state.get("source_name", "").strip() or default_name
-    source_id = f"source-{len(st.session_state.get('added_sources', [])) + 1}"
-    provider = _provider_for({"source_reference": reference, "source_type": source_type})
-    added = list(st.session_state.get("added_sources", []))
-    added.insert(0, {"id": source_id, "title": name, "description": description, "category": "Personal learning", "difficulty": "To assess", "problem_type": "Learning source", "source_type": source_type, "source_reference": reference, "tags": ["Personal learning"], "provider": provider, "review_status": "Not reviewed"})
-    st.session_state["added_sources"] = added
+    reference = value if source_type != "PDF" else question_pdf.name
+    name = st.session_state.get("source_name", "").strip() or (urlparse(value).netloc if source_type == "URL" else getattr(question_pdf, "name", "Untitled note"))
+    subject = st.session_state.get("source_subject", "Auto detect")
+    preview = st.session_state.get("pdf_import_preview", {}) if source_type == "PDF" else {}
+    item = {
+        "id": f"source-{len(st.session_state.get('added_sources', [])) + 1}",
+        "title": name,
+        "description": value or f"Imported PDF: {question_pdf.name}",
+        "category": subject if subject != "Auto detect" else "Personal learning",
+        "difficulty": "To assess",
+        "problem_type": "Exam PDF" if source_type == "PDF" else "Learning source",
+        "source_type": source_type,
+        "source_reference": reference,
+        "tags": [subject] if subject != "Auto detect" else ["Personal learning"],
+        "provider": _provider_for({"source_reference": reference, "source_type": source_type}),
+        "review_status": "Not reviewed",
+        "exam_name": st.session_state.get("source_exam_name", "").strip(),
+        "year": st.session_state.get("source_year", "").strip(),
+        "answer_state": "Verified" if answer_pdf else "No answer",
+        "import_preview": preview,
+    }
+    st.session_state["added_sources"] = [item, *st.session_state.get("added_sources", [])]
     st.session_state["source_added"] = name
     return None
+
+
+def _render_pdf_preview() -> None:
+    preview = st.session_state.get("pdf_import_preview", {})
+    st.markdown("#### Import preview")
+    if st.session_state.get("source_answer_pdf") is None:
+        st.info("Unverified learning mode: continue with hints, but verified grading and answer analysis are unavailable until an official answer file is added.")
+    else:
+        st.caption("Official answer file selected. Verification will be available after PDF processing completes.")
+    fields = [("Detected subject", preview.get("detected_subject")), ("Questions", preview.get("question_count")), ("Answers", preview.get("answer_count")), ("Matched answers", preview.get("matched_answers")), ("Unmatched questions", preview.get("unmatched_questions"))]
+    columns = st.columns(2)
+    for index, (label, value) in enumerate(fields):
+        columns[index % 2].caption(f"{label}: {value if value is not None else 'Not available'}")
+    questions = preview.get("questions", [])
+    if questions:
+        for question in questions[:4]:
+            number = escape(str(question.get("number", "-")))
+            state = escape(str(question.get("answer_state", "No answer")))
+            excerpt = escape(str(question.get("text", ""))[:120])
+            st.markdown(f'<div class="hc-card"><b>Question {number}</b> <span class="hc-chip">{state}</span><p class="hc-muted">{excerpt}</p></div>', unsafe_allow_html=True)
+    else:
+        st.caption("Question preview will appear after PDF processing.")
+    if st.button("Review warnings", key="review_pdf_warnings"):
+        st.session_state["show_pdf_warnings"] = True
+    if st.session_state.get("show_pdf_warnings"):
+        for warning in preview.get("warnings", []):
+            st.warning(warning)
+    cancel, confirm = st.columns(2)
+    with cancel:
+        if st.button("Cancel", key="cancel_pdf_import", use_container_width=True):
+            st.session_state.pop("show_pdf_preview", None)
+            st.session_state.pop("show_pdf_warnings", None)
+            st.rerun()
+    with confirm:
+        if st.button("Confirm import", type="primary", key="confirm_pdf_import", use_container_width=True):
+            error = _add_source()
+            if error:
+                st.error(error)
+            else:
+                st.session_state.pop("show_pdf_preview", None)
+                st.rerun()
 
 
 @st.dialog("Add Learning Source")
@@ -58,11 +103,24 @@ def _render_source_dialog() -> None:
     if source_type == "URL":
         st.text_input("URL", key="source_url", placeholder="https://...")
     elif source_type == "PDF":
-        st.file_uploader("PDF", type=["pdf"], key="source_pdf")
+        st.file_uploader("Question paper PDF", type=["pdf"], key="source_pdf")
+        st.file_uploader("Answer / explanation PDF", type=["pdf"], key="source_answer_pdf")
+        st.caption("Without an official answer file, hints are available, but automatic grading and answer analysis may be unavailable or AI-inferred.")
+        st.selectbox("Subject", ["Auto detect", "Coding", "English", "Mathematics", "Generic multiple choice"], key="source_subject")
+        st.text_input("Exam name", key="source_exam_name", placeholder="e.g. 2025 mock exam")
+        st.text_input("Year", key="source_year", placeholder="e.g. 2025")
+        if st.button("Preview import", key="preview_pdf_import"):
+            if st.session_state.get("source_pdf") is None:
+                st.warning("Choose a question paper PDF before previewing it.")
+            else:
+                st.session_state["pdf_import_preview"] = st.session_state.get("pdf_import_preview") or {"detected_subject": st.session_state.get("source_subject", "Auto detect"), "question_count": None, "answer_count": None, "matched_answers": None, "unmatched_questions": None, "warnings": ["PDF processing is not connected yet. Counts and question text will appear after the parser returns a preview."], "questions": []}
+                st.session_state["show_pdf_preview"] = True
+        if st.session_state.get("show_pdf_preview"):
+            _render_pdf_preview()
     else:
         st.text_area("Notes", key="source_note", placeholder="Paste or write the learning material here.", height=120)
 
-    if st.button("Add Learning Source", type="primary", key="add_source"):
+    if source_type != "PDF" and st.button("Add Learning Source", type="primary", key="add_source"):
         error = _add_source()
         if error:
             st.error(error)
@@ -76,19 +134,15 @@ def render_problem_list(service: ProblemService, on_open_problem: Callable[[int 
         _render_source_dialog()
     if name := st.session_state.pop("source_added", None):
         st.success(f"{name} was added to your learning sources.")
-
-    filter_a, filter_b = st.columns(2)
+    left, right = st.columns(2)
     filters = service.get_filters()
-    with filter_a:
+    with left:
         category = st.selectbox("Topic", ["All"] + filters["categories"])
-    with filter_b:
+    with right:
         difficulty = st.selectbox("Challenge level", ["All"] + filters["difficulties"])
     problems = service.get_problem_list(category=None if category == "All" else category, difficulty=None if difficulty == "All" else difficulty)
-    problems = list(st.session_state.get("added_sources", [])) + problems
+    problems = [*st.session_state.get("added_sources", []), *problems]
     st.caption(f"{len(problems)} learning source(s) available")
-    if not problems:
-        st.info("Add your first learning source to begin.")
-        return
     for problem in problems:
         concepts = ", ".join(problem.get("tags", []) or [problem["category"]])
         provider = problem.get("provider") or _provider_for(problem)
