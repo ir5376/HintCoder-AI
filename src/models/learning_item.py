@@ -25,6 +25,7 @@ class LearningItem(Base):
     __tablename__ = "learning_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    item_type: Mapped[str] = mapped_column(String(100), nullable=False, default="unknown")
     owner_user_id: Mapped[str] = mapped_column(String(100), nullable=False, default="local")
     source_type: Mapped[str] = mapped_column(String(50), nullable=False)
     source_id: Mapped[str] = mapped_column(String(255), nullable=True)
@@ -53,6 +54,7 @@ class LearningItem(Base):
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
+            "item_type": self.item_type,
             "owner_user_id": self.owner_user_id,
             "source_type": self.source_type,
             "source_id": self.source_id,

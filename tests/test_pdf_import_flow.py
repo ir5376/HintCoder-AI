@@ -246,6 +246,20 @@ def test_pdf_import_persists_questions_after_schema_migration(monkeypatch):
         assert count == 1
 
 
+def test_pdf_import_persists_question_item_type(monkeypatch):
+    _install_fake_pypdf(monkeypatch)
+    temp_dir, database_url = _database_url()
+    with temp_dir:
+        init_db(database_url)
+        with get_session(database_url) as session:
+            result = ProblemService(session).import_pdf_source(question_pdf_name="questions.pdf", question_pdf=b"%PDF-1.5 fake")
+            item_id = result["items"][0]["learning_item"]["id"]
+            item = session.query(LearningItem).filter(LearningItem.id == item_id).one()
+
+        assert item.item_type == "multiple_choice"
+        assert item.question_type == "multiple_choice"
+
+
 def test_retry_does_not_duplicate_fallback_question(monkeypatch):
     class SingleBlockPdfReader:
         def __init__(self, _data):

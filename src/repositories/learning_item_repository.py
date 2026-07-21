@@ -106,6 +106,7 @@ class LearningItemRepository:
     def upsert_learning_item(self, parsed: ParsedLearningItem) -> LearningItem:
         existing = self._find_existing(parsed)
         values = {
+            "item_type": parsed.question_type or "unknown",
             "owner_user_id": parsed.owner_user_id,
             "source_type": parsed.source_type,
             "source_id": parsed.source_id,

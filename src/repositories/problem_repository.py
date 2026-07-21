@@ -6,6 +6,7 @@ from typing import Any, List, Optional
 from sqlalchemy.orm import Session
 
 from src.models.problem import Problem
+from src.models.learning_item import LearningItem
 
 
 class ProblemRepository:
@@ -62,6 +63,14 @@ class ProblemRepository:
         if difficulty:
             query = query.filter(Problem.difficulty == difficulty)
         return query.order_by(Problem.id).all()
+
+    def list_learning_items(self, owner_user_id: str = "local") -> List[LearningItem]:
+        return (
+            self.session.query(LearningItem)
+            .filter(LearningItem.owner_user_id == owner_user_id)
+            .order_by(LearningItem.id)
+            .all()
+        )
 
     def get_problem(self, problem_id: int) -> Optional[Problem]:
         return self.session.query(Problem).filter(Problem.id == problem_id).one_or_none()

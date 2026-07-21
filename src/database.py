@@ -76,6 +76,7 @@ def _ensure_learning_os_table_columns(engine: Engine) -> None:
     inspector = inspect(engine)
     table_columns = {
         "learning_items": {
+            "item_type": "VARCHAR(100) NOT NULL DEFAULT 'unknown'",
             "owner_user_id": "VARCHAR(100) NOT NULL DEFAULT 'local'",
             "source_type": "VARCHAR(50) NOT NULL DEFAULT 'unknown'",
             "source_id": "VARCHAR(255)",

@@ -290,6 +290,32 @@ def test_persisted_pdf_questions_survive_new_service_session_instance(monkeypatc
         assert "B. BFS" in loaded["choices"]
 
 
+def test_pdf_learning_item_appears_in_problem_list_after_problem_seed_refresh(monkeypatch):
+    _install_fake_pdf_reader(monkeypatch)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_url = f"sqlite:///{os.path.join(temp_dir, 'test.db')}"
+        init_db(database_url)
+
+        with get_session(database_url) as session:
+            result = ProblemService(session).import_pdf_source(question_pdf_name="demo_questions.pdf", question_pdf=PDF_QUESTION_BYTES)
+            imported_item = session.query(LearningItem).filter(LearningItem.id == result["items"][0]["learning_item"]["id"]).one()
+
+        init_db(database_url)
+
+        with get_session(database_url) as session:
+            problems = ProblemService(session).get_problem_list()
+
+        imported_rows = [problem for problem in problems if problem["id"] == f"learning_item:{imported_item.id}"]
+        assert imported_item.item_type == "multiple_choice"
+        assert imported_item.provider == "pdf"
+        assert imported_item.source_type == "exam_pdf"
+        assert imported_item.owner_user_id == "local"
+        assert imported_item.source_id == "demo_questions.pdf"
+        assert imported_rows
+        assert imported_rows[0]["source_type"] == "PDF"
+        assert imported_rows[0]["question_text"]
+
+
 def test_pdf_preview_returns_structured_questions_without_persisting(monkeypatch):
     _install_fake_pdf_reader(monkeypatch)
     with tempfile.TemporaryDirectory() as temp_dir:
