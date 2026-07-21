@@ -80,3 +80,7 @@ We used Codex throughout development to
 - improve project architecture
 - implement UI integration
 - speed up development
+
+## GPT-5.6 Integration
+
+GPT-5.6 was used throughout the development process to help design the system architecture, improve prompts, debug the application, and accelerate implementation.
