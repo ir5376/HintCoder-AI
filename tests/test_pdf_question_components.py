@@ -25,6 +25,14 @@ def test_extraction_detail_overrides_default_copy():
     assert extraction_message(ExtractionStateViewModel(ExtractionStatus.PARTIAL, "3 pages need review.")) == ("warning", "3 pages need review.")
 
 
+def test_extraction_message_hides_sqlalchemy_traceback():
+    detail = "Traceback (most recent call last):\n  File 'worker.py'\nsqlalchemy.exc.OperationalError: database is locked"
+    assert extraction_message(ExtractionStateViewModel(ExtractionStatus.FAILED, detail)) == (
+        "error",
+        "Couldn't import PDF.",
+    )
+
+
 def test_frontend_actions_have_stable_string_values():
     action = FrontendAction(FrontendActionType.REQUEST_HINT, "question-7", {"level": 2})
     assert action.kind.value == "request_hint"

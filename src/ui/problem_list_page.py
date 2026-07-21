@@ -104,7 +104,7 @@ def _add_source(service: ProblemService) -> str | None:
         "import_preview": preview,
     }
     st.session_state["added_sources"] = [item, *st.session_state.get("added_sources", [])]
-    st.session_state["source_added"] = name
+    st.session_state["source_added"] = "PDF imported." if source_type == "PDF" else f"{name} was added."
     return None
 
 
