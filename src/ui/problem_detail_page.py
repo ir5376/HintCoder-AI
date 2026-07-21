@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from html import escape
 import logging
+import re
 
 import streamlit as st
 
@@ -62,7 +63,92 @@ def _is_exam_item(problem: dict) -> bool:
     return problem.get("problem_type") == "Exam PDF" or problem.get("source_type") == "PDF"
 
 
-def _render_exam_attempt(problem: dict) -> None:
+def _normalized_display_text(value: object) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip().casefold()
+
+
+def _choice_without_label(choice: object) -> str:
+    return re.sub(r"^\s*[A-E]\s*[.)]\s*", "", str(choice or "").strip(), flags=re.IGNORECASE)
+
+
+def presentation_choices(question_text: str, choices: list[str]) -> list[str]:
+    """Return answer choices with parser artifacts hidden from the UI."""
+    if not choices:
+        return []
+    question = _normalized_display_text(question_text)
+    first = _normalized_display_text(choices[0])
+    first_without_label = _normalized_display_text(_choice_without_label(choices[0]))
+    if question and (first == question or first_without_label == question):
+        return choices[1:]
+    return choices
+
+
+def can_submit_answer(selected_answer: str | None, choices: list[str]) -> bool:
+    return bool(selected_answer and selected_answer in choices)
+
+
+def answer_status_label(status: str) -> str:
+    return {
+        "correct": "Correct",
+        "incorrect": "Incorrect",
+        "unverified": "Unverified",
+        "submission_failed": "Submission failed",
+        "not_submitted": "Not submitted",
+    }.get(status or "not_submitted", "Not submitted")
+
+
+def load_answer_state(service: ProblemService, problem_id: int | str) -> dict:
+    return service.get_answer_state(problem_id)
+
+
+def submit_selected_answer(service: ProblemService, problem_id: int | str, selected_answer: str) -> dict:
+    return service.submit_answer(problem_id, selected_answer)
+
+
+def _render_answer_state(
+    state: dict,
+    *,
+    service: ProblemService,
+    problem_id: int | str,
+    submitted: bool,
+) -> None:
+    status = state.get("status", "not_submitted")
+    selected = state.get("selected_answer") or state.get("raw_selected_answer") or ""
+    if status == "not_submitted":
+        st.caption("Answer state: Not submitted")
+        return
+    if status == "correct":
+        st.success("Correct")
+    elif status == "incorrect":
+        st.error("Incorrect")
+    elif status == "unverified":
+        st.warning("Unverified")
+    elif status == "submission_failed":
+        st.error("Submission failed")
+    else:
+        st.info(answer_status_label(status))
+    if selected:
+        st.caption(f"Your answer: {selected}")
+    if submitted and status in {"correct", "incorrect"} and state.get("explanation_available"):
+        with st.expander("View explanation", expanded=False):
+            try:
+                solution = service.get_linked_solution(problem_id)
+            except Exception as exc:
+                logger.exception(
+                    "Failed to load explanation for problem_id=%s error_type=%s",
+                    problem_id,
+                    type(exc).__name__,
+                )
+                st.info("The explanation is unavailable right now.")
+            else:
+                explanation = solution.get("explanation") or ""
+                if explanation:
+                    st.write(explanation)
+                else:
+                    st.info("The explanation is unavailable right now.")
+
+
+def _render_exam_attempt(problem: dict, service: ProblemService) -> None:
     questions = (problem.get("import_preview") or {}).get("questions") or []
     if not questions and (problem.get("question_text") or problem.get("choices")):
         questions = [
@@ -85,18 +171,64 @@ def _render_exam_attempt(problem: dict) -> None:
         return
     for item in questions:
         number = item.get("number", "-")
+        problem_id = problem["id"]
+        state_key = f"answer_state_{problem_id}_{number}"
+        error_key = f"answer_error_{problem_id}_{number}"
+        submitted_key = f"answer_submitted_{problem_id}_{number}"
+        try:
+            answer_state = load_answer_state(service, problem_id)
+        except Exception as exc:
+            logger.exception(
+                "Failed to load answer state for problem_id=%s error_type=%s",
+                problem_id,
+                type(exc).__name__,
+            )
+            answer_state = {"status": "not_submitted"}
+            st.info("Answer status is unavailable right now.")
+        else:
+            st.session_state[state_key] = answer_state
         st.markdown(f"#### Question {number}")
         if item.get("passage"):
             st.caption(item["passage"])
-        st.write(item.get("text", "Question text is unavailable."))
+        question_text = item.get("text", "Question text is unavailable.")
+        st.write(question_text)
         if item.get("source_page") is not None:
             st.caption(f"Source page {item['source_page']}")
-        choices = item.get("choices") or []
+        choices = presentation_choices(question_text, item.get("choices") or [])
         if choices:
-            st.radio("Choose an answer", choices, key=f"exam_choice_{problem['id']}_{number}")
+            choice_key = f"exam_choice_{problem_id}_{number}"
+            selected = st.radio("Choose an answer", choices, index=None, key=choice_key)
+            if st.button(
+                "Submit answer",
+                type="primary",
+                key=f"submit_answer_{problem_id}_{number}",
+                disabled=not can_submit_answer(selected, choices),
+            ):
+                st.session_state.pop(error_key, None)
+                try:
+                    with st.spinner("Submitting answer..."):
+                        answer_state = submit_selected_answer(service, problem_id, selected or "")
+                except Exception as exc:
+                    logger.exception(
+                        "Answer submission failed for problem_id=%s error_type=%s",
+                        problem_id,
+                        type(exc).__name__,
+                    )
+                    st.session_state[error_key] = "Submission failed"
+                    answer_state = {"status": "submission_failed", "selected_answer": selected or ""}
+                else:
+                    st.session_state[state_key] = answer_state
+                    st.session_state[submitted_key] = True
+            if st.session_state.get(error_key):
+                st.error("Submission failed. Please try again.")
         else:
             st.text_area("Your answer", key=f"exam_answer_{problem['id']}_{number}", height=100)
-        st.caption(f"Answer state: {item.get('answer_state', 'No answer')}")
+        _render_answer_state(
+            answer_state,
+            service=service,
+            problem_id=problem_id,
+            submitted=bool(answer_state.get("submission_id") or st.session_state.get(submitted_key)),
+        )
 
 
 def render_problem_detail(service: ProblemService, problem_id: int | str | None, on_start_learning: Callable[[], None]) -> None:
@@ -140,7 +272,7 @@ def render_learning_workspace(
     tabs = st.tabs(["Problem", "Hint", "Memory Cards", "Review", "Quiz", "Generate Similar Problem"])
     with tabs[0]:
         if _is_exam_item(problem):
-            _render_exam_attempt(problem)
+            _render_exam_attempt(problem, service)
         else:
             st.markdown("#### Problem")
             st.write(problem["description"])
