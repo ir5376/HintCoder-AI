@@ -50,7 +50,7 @@ def _add_source() -> str | None:
         "import_preview": preview,
     }
     st.session_state["added_sources"] = [item, *st.session_state.get("added_sources", [])]
-    st.session_state["source_added"] = name
+    st.session_state["source_added"] = "PDF imported." if source_type == "PDF" else f"{name} was added."
     return None
 
 
@@ -133,7 +133,7 @@ def render_problem_list(service: ProblemService, on_open_problem: Callable[[int 
     if st.button("Add Learning Source", type="primary"):
         _render_source_dialog()
     if name := st.session_state.pop("source_added", None):
-        st.success(f"{name} was added to your learning sources.")
+        st.success(name)
     left, right = st.columns(2)
     filters = service.get_filters()
     with left:

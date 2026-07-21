@@ -27,17 +27,34 @@ ActionCallback = Callable[[FrontendAction], None]
 _EXTRACTION_COPY = {
     ExtractionStatus.PENDING: ("info", "PDF extraction is waiting to start."),
     ExtractionStatus.PROCESSING: ("info", "Extracting questions from the PDF..."),
-    ExtractionStatus.COMPLETED: ("success", "Question extraction completed."),
-    ExtractionStatus.PARTIAL: ("warning", "Some questions were extracted, but the result is incomplete."),
-    ExtractionStatus.FAILED: ("error", "Question extraction failed."),
+    ExtractionStatus.COMPLETED: ("success", "PDF imported."),
+    ExtractionStatus.PARTIAL: ("warning", "PDF imported with some issues."),
+    ExtractionStatus.FAILED: ("error", "Couldn't import PDF."),
     ExtractionStatus.OCR_REQUIRED: ("warning", "This PDF appears to contain images only and requires OCR."),
     ExtractionStatus.EMPTY: ("warning", "No questions were extracted from this PDF."),
 }
 
 
+def _is_internal_error_detail(detail: str) -> bool:
+    """Return whether a backend diagnostic should stay out of the UI."""
+    normalized = detail.casefold()
+    markers = (
+        "traceback (most recent call last)",
+        "sqlalchemy",
+        "statementerror",
+        "operationalerror",
+        "integrityerror",
+        "databaseerror",
+    )
+    return any(marker in normalized for marker in markers)
+
+
 def extraction_message(state: ExtractionStateViewModel) -> tuple[str, str]:
     tone, default = _EXTRACTION_COPY[state.status]
-    return tone, state.detail.strip() if state.detail and state.detail.strip() else default
+    detail = state.detail.strip() if state.detail else ""
+    if not detail or _is_internal_error_detail(detail):
+        return tone, default
+    return tone, detail
 
 
 def question_position_label(navigation: QuestionNavigationViewModel) -> str:
