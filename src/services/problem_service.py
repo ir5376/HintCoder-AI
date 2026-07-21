@@ -199,6 +199,30 @@ class ProblemService:
             title=title,
         )
 
+    def generate_similar_problem(self, problem_id: int | str) -> Dict[str, Any]:
+        learning_item_id = self._learning_item_id_from_public_id(problem_id)
+        if learning_item_id is not None:
+            return LearningSourceService(self.repository.session).generate_similar_problem(learning_item_id)
+        problem = self.repository.get_problem(problem_id)
+        if problem is None:
+            raise ValueError(f"Problem not found: {problem_id}")
+        payload = self._problem_to_dict(problem)
+        concept = (payload.get("tags") or [payload.get("category") or "core idea"])[0]
+        question = _rewrite_demo_question(payload.get("description", ""), concept)
+        choices = _demo_choices(payload)
+        return {
+            "title": f"Similar Practice: {payload.get('title', 'Problem')}",
+            "label": "AI-generated",
+            "difficulty": payload.get("difficulty") or "Unknown",
+            "topic": concept,
+            "concept": concept,
+            "question": question,
+            "choices": choices,
+            "correct_answer": choices[0],
+            "explanation": f"This keeps the same topic and difficulty while changing the details. The intended answer is {choices[0]}.",
+            "source_problem_id": payload.get("id"),
+        }
+
     def _problem_to_dict(self, problem: Problem) -> Dict[str, Any]:
         payload = problem.to_dict()
         learning_item = self._learning_item_for_problem(problem)
@@ -347,3 +371,32 @@ def _parse_choice(choice: str) -> tuple[str, str, str]:
 
 def _compact_answer(answer: str) -> str:
     return re.sub(r"[\s.)：:：-]+", "", str(answer or "").strip().lower())
+
+def _rewrite_demo_question(description: str, concept: str) -> str:
+    source = str(description or "").strip()
+    if not source:
+        return f"Solve a new practice problem using {concept}."
+
+    def shift(match: re.Match[str]) -> str:
+        return str(int(match.group(0)) + 1)
+
+    rewritten = re.sub(r"\b\d+\b", shift, source)
+    if rewritten == source:
+        rewritten = f"In a new scenario, {source}"
+    return rewritten
+
+
+def _demo_choices(problem: Dict[str, Any]) -> list[str]:
+    if problem.get("test_cases"):
+        return [
+            "A. Adapt the same reasoning to the changed input",
+            "B. Ignore the changed condition",
+            "C. Use an unrelated shortcut",
+            "D. Stop before checking edge cases",
+        ]
+    return [
+        "A. Apply the same core idea",
+        "B. Guess from the wording",
+        "C. Ignore the constraints",
+        "D. Use an unrelated concept",
+    ]

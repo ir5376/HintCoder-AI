@@ -129,7 +129,9 @@ class LearningSourceService:
         return self._store_and_process(parsed)
 
     def generate_similar_problem(self, learning_item_id: int) -> dict[str, Any]:
-        return self.engine.generate_similar_problem(learning_item_id)
+        result = self.engine.generate_similar_problem(learning_item_id)
+        self.repository.session.commit()
+        return result
 
     def _store_and_process(self, parsed, *, commit: bool = True) -> dict[str, Any]:
         item = self.repository.upsert_learning_item(parsed)

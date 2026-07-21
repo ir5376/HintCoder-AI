@@ -105,6 +105,35 @@ def submit_selected_answer(service: ProblemService, problem_id: int | str, selec
     return service.submit_answer(problem_id, selected_answer)
 
 
+def similar_problem_result_key(problem_id: int | str) -> str:
+    return f"similar_problem_result_{problem_id}"
+
+
+def similar_problem_button_key(problem_id: int | str) -> str:
+    return f"similar_problem_button_{problem_id}"
+
+
+def similar_problem_display_key(problem_id: int | str) -> str:
+    return f"similar_problem_display_{problem_id}"
+
+
+def similar_problem_hint_button_key(problem_id: int | str) -> str:
+    return f"similar_problem_hint_button_{problem_id}"
+
+
+def similar_problem_hint_result_key(problem_id: int | str) -> str:
+    return f"similar_problem_hint_result_{problem_id}"
+
+
+def store_similar_problem_result(state: dict, problem_id: int | str, result: dict) -> None:
+    state[similar_problem_result_key(problem_id)] = result
+
+
+def get_similar_problem_result(state: dict, problem_id: int | str) -> dict | None:
+    value = state.get(similar_problem_result_key(problem_id))
+    return value if isinstance(value, dict) else None
+
+
 def _render_answer_state(
     state: dict,
     *,
@@ -346,8 +375,59 @@ def render_learning_workspace(
         if st.button("Check answer", key=f"check_quiz_{problem['id']}"):
             st.success("Saved. Compare your decision with the concept and constraints before continuing.") if st.session_state.get(key, "").strip() else st.warning("Write your reasoning before checking it.")
     with tabs[5]:
-        if st.button("Generate similar problem", key=f"similar_problem_{problem['id']}", type="primary"):
-            concepts = ", ".join(problem.get("tags", []) or [problem["category"]])
-            st.session_state[f"similar_problem_{problem['id']}"] = f"Create a new {problem.get('difficulty', 'practice')} problem using {concepts}, with different inputs and scenario."
-        if prompt := st.session_state.get(f"similar_problem_{problem['id']}"):
-            st.markdown(f'<div class="hc-card"><b>Similar practice prompt</b><p class="hc-muted">{escape(prompt)}</p></div>', unsafe_allow_html=True)
+        result_key = similar_problem_result_key(problem["id"])
+        if result_key not in st.session_state:
+            st.session_state[result_key] = None
+        if st.button("Generate similar problem", key=similar_problem_button_key(problem["id"]), type="primary"):
+            try:
+                with st.spinner("Generating one similar problem..."):
+                    generated = service.generate_similar_problem(problem["id"])
+            except Exception as exc:
+                logger.exception(
+                    "Similar problem generation failed for problem_id=%s error_type=%s",
+                    problem.get("id"),
+                    type(exc).__name__,
+                )
+                st.error("We could not generate a valid similar problem right now.")
+            else:
+                store_similar_problem_result(st.session_state, problem["id"], generated)
+                st.rerun()
+        if generated := get_similar_problem_result(st.session_state, problem["id"]):
+            st.markdown(f'<div class="hc-card"><b>{escape(str(generated.get("title", "Similar practice")))}</b><br><span class="hc-muted">{escape(str(generated.get("label", "AI-generated")))} - {escape(str(generated.get("difficulty", problem.get("difficulty", "Unknown"))))}</span></div>', unsafe_allow_html=True)
+            st.markdown("#### Question")
+            st.write(generated.get("question", ""))
+            choices = generated.get("choices") or []
+            if choices:
+                st.radio("Choose an answer", choices, index=None, key=similar_problem_display_key(problem["id"]))
+            st.markdown("#### Answer")
+            st.caption(f"Correct answer: {generated.get('correct_answer', 'Unavailable')}")
+            if generated.get("explanation"):
+                st.write(generated["explanation"])
+            if st.button("Get a hint for this problem", key=similar_problem_hint_button_key(problem["id"])):
+                if hint_service is None:
+                    st.error("The hint assistant is unavailable. Please try again shortly.")
+                else:
+                    similar_context = build_hint_context(
+                        {
+                            **problem,
+                            "title": generated.get("title", problem.get("title", "")),
+                            "description": generated.get("question", ""),
+                            "test_cases": generated.get("choices", []),
+                        },
+                        student_code=f"Generated choices: {generated.get('choices', [])}",
+                        programming_language=st.session_state.get(f"student_language_{problem['id']}", "Python"),
+                        hint_level=1,
+                    )
+                    try:
+                        result = hint_service.generate_hint(similar_context, hint_level=1)
+                    except Exception as exc:
+                        logger.exception(
+                            "Similar problem hint generation failed for problem_id=%s error_type=%s",
+                            problem.get("id"),
+                            type(exc).__name__,
+                        )
+                        st.error("We could not generate a hint for this problem right now.")
+                    else:
+                        st.session_state[similar_problem_hint_result_key(problem["id"])] = result.get("hint", "")
+            if hint := st.session_state.get(similar_problem_hint_result_key(problem["id"])):
+                st.success(hint)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from src.models.learning_item import LearningItem
@@ -84,18 +85,26 @@ class LearningEngineService:
         concepts = payload["concepts"]
         concept = concepts[0] if concepts else "core idea"
         profile = get_subject_profile(payload.get("subject", ""), payload.get("question_type", ""))
+        original_question = payload.get("content") or payload.get("title") or ""
+        original_choices = payload.get("choices") or []
+        generated_question = _rewrite_question(original_question, concept=concept)
+        generated_choices = _rewrite_choices(original_choices)
+        correct_answer = generated_choices[0] if generated_choices else "Review the transformed condition."
         similar_problem = {
             "title": f"Similar Practice: {payload['title']}",
             "label": "AI-generated",
             "difficulty": payload["difficulty"],
+            "topic": concept,
             "concept": concept,
             "learning_objective": payload["learning_objective"],
             "constraints": list(profile.similar_question_constraints),
-            "question": (
-                f"Create one solution plan for a new problem that uses {concept} at "
-                f"{payload['difficulty']} difficulty. Explain the key decision before solving."
-            ),
+            "question": generated_question,
+            "choices": generated_choices,
+            "correct_answer": correct_answer,
+            "explanation": _short_similar_explanation(concept, correct_answer),
+            "source_learning_item_id": learning_item_id,
         }
+        _validate_similar_problem(similar_problem, original_question)
         self.repository.add_artifact(learning_item_id, "similar_problem", similar_problem)
         self.repository.add_history(
             learning_item_id,
@@ -113,3 +122,66 @@ def _multiple_choice(answer: str) -> list[str]:
         if choice not in deduped:
             deduped.append(choice)
     return deduped
+
+
+def _rewrite_question(question: str, *, concept: str) -> str:
+    source = str(question or "").strip()
+    if not source:
+        return f"New practice problem: apply {concept} in a slightly different scenario."
+    rewritten = _shift_numbers(source)
+    rewritten = re.sub(r"\boriginal\b", "new", rewritten, flags=re.IGNORECASE)
+    if rewritten == source:
+        rewritten = f"In a new scenario, {source}"
+    return rewritten
+
+
+def _shift_numbers(text: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        value = match.group(0)
+        try:
+            number = int(value)
+        except ValueError:
+            return value
+        return str(number + 1 if number >= 0 else number - 1)
+
+    return re.sub(r"\b\d+\b", replace, text)
+
+
+def _rewrite_choices(choices: list[str]) -> list[str]:
+    if not choices:
+        return ["A. New condition works", "B. The condition is unrelated", "C. The result is impossible", "D. More information is required"]
+    rewritten = []
+    for index, choice in enumerate(choices):
+        shifted = _shift_numbers(str(choice))
+        if shifted == str(choice):
+            shifted = f"{choice} (modified)" if index == 0 else str(choice)
+        rewritten.append(shifted)
+    return _dedupe_choices(rewritten)
+
+
+def _dedupe_choices(choices: list[str]) -> list[str]:
+    deduped = []
+    seen = set()
+    for choice in choices:
+        normalized = re.sub(r"\s+", " ", str(choice or "")).strip()
+        if normalized and normalized.casefold() not in seen:
+            seen.add(normalized.casefold())
+            deduped.append(normalized)
+    return deduped
+
+
+def _short_similar_explanation(concept: str, correct_answer: str) -> str:
+    return f"The transformed problem keeps the same core concept: {concept}. The intended answer is {correct_answer} because the modified details preserve the same reasoning pattern."
+
+
+def _validate_similar_problem(problem: dict[str, Any], original_question: str) -> None:
+    if not problem.get("question") or not str(problem["question"]).strip():
+        raise ValueError("Generated problem is empty.")
+    if str(problem.get("question", "")).strip() == str(original_question or "").strip():
+        raise ValueError("Generated problem copied the original question.")
+    if not problem.get("choices"):
+        raise ValueError("Generated problem has no choices.")
+    if not problem.get("correct_answer"):
+        raise ValueError("Generated problem has no correct answer.")
+    if not problem.get("explanation"):
+        raise ValueError("Generated problem has no explanation.")
