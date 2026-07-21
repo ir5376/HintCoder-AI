@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -14,6 +15,8 @@ from src.models.problem import Problem
 from src.services.subject_profiles import get_subject_profile
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -110,7 +113,16 @@ class HintService:
         level = max(1, min(hint_level if hint_level is not None else context.hint_level or 1, 4))
         raw_response = self._call_gemini(self._build_prompt(context, level))
         hint = self._normalize_hint(raw_response, context, level)
-        self._store_hint_history(context, level, hint)
+        try:
+            self._store_hint_history(context, level, hint)
+        except Exception as exc:
+            logger.exception(
+                "Hint history persistence failed for problem_id=%s source_platform=%s hint_level=%s error_type=%s",
+                context.problem_id,
+                context.source_platform,
+                level,
+                type(exc).__name__,
+            )
         return {
             "hint": hint,
             "hint_level": level,

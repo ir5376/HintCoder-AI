@@ -158,6 +158,20 @@ class LearningReviewQueue(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class LearningItemAnswerSubmission(Base):
+    __tablename__ = "learning_item_answer_submissions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(100), nullable=False, default="local", index=True)
+    learning_item_id: Mapped[int] = mapped_column(ForeignKey("learning_items.id"), nullable=False, index=True)
+    selected_answer: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_selected_answer: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    correct_answer: Mapped[str] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="unverified")
+    is_correct: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
 class LearningHistory(Base):
     __tablename__ = "learning_history"
 

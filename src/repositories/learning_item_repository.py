@@ -12,6 +12,7 @@ from src.models.learning_item import (
     LearningArtifact,
     LearningAttempt,
     LearningHistory,
+    LearningItemAnswerSubmission,
     LearningItem,
     LearningReviewQueue,
     PassageGroup,
@@ -89,16 +90,28 @@ class LearningItemRepository:
         matched_items_by_question = matched_items_by_question or {}
         records = []
         for answer in answers:
-            record = AnswerRecord(
+            question_number = str(answer.question_number)
+            matched_learning_item_id = matched_items_by_question.get(question_number)
+            record = self._find_existing_answer_record(
+                question_number=question_number,
+                matched_learning_item_id=matched_learning_item_id,
                 exam_source_id=exam_source_id,
-                subject=subject,
-                question_number=str(answer.question_number),
-                verified_answer=str(answer.official_answer),
-                explanation=str(answer.explanation or ""),
-                page_number=answer.page_number,
-                matched_learning_item_id=matched_items_by_question.get(str(answer.question_number)),
             )
-            self.session.add(record)
+            values = {
+                "exam_source_id": exam_source_id,
+                "subject": subject,
+                "question_number": question_number,
+                "verified_answer": str(answer.official_answer),
+                "explanation": str(answer.explanation or ""),
+                "page_number": answer.page_number,
+                "matched_learning_item_id": matched_learning_item_id,
+            }
+            if record is None:
+                record = AnswerRecord(**values)
+                self.session.add(record)
+            else:
+                for key, value in values.items():
+                    setattr(record, key, value)
             records.append(record)
         self.session.flush()
         return records
@@ -296,6 +309,76 @@ class LearningItemRepository:
 
     def get(self, learning_item_id: int) -> LearningItem | None:
         return self.session.query(LearningItem).filter(LearningItem.id == learning_item_id).one_or_none()
+
+    def linked_answer_record(self, learning_item_id: int) -> AnswerRecord | None:
+        return (
+            self.session.query(AnswerRecord)
+            .filter(AnswerRecord.matched_learning_item_id == learning_item_id)
+            .order_by(AnswerRecord.id.desc())
+            .first()
+        )
+
+    def add_answer_submission(
+        self,
+        *,
+        user_id: str,
+        learning_item_id: int,
+        selected_answer: str,
+        normalized_selected_answer: str,
+        correct_answer: str | None,
+        status: str,
+        is_correct: bool | None,
+    ) -> LearningItemAnswerSubmission:
+        submission = LearningItemAnswerSubmission(
+            user_id=user_id,
+            learning_item_id=learning_item_id,
+            selected_answer=selected_answer,
+            normalized_selected_answer=normalized_selected_answer,
+            correct_answer=correct_answer,
+            status=status,
+            is_correct=None if is_correct is None else int(is_correct),
+        )
+        self.session.add(submission)
+        self.session.flush()
+        return submission
+
+    def latest_answer_submission(self, *, user_id: str, learning_item_id: int) -> LearningItemAnswerSubmission | None:
+        return (
+            self.session.query(LearningItemAnswerSubmission)
+            .filter(
+                LearningItemAnswerSubmission.user_id == user_id,
+                LearningItemAnswerSubmission.learning_item_id == learning_item_id,
+            )
+            .order_by(LearningItemAnswerSubmission.submitted_at.desc(), LearningItemAnswerSubmission.id.desc())
+            .first()
+        )
+
+    def _find_existing_answer_record(
+        self,
+        *,
+        question_number: str,
+        matched_learning_item_id: int | None,
+        exam_source_id: int,
+    ) -> AnswerRecord | None:
+        if matched_learning_item_id is not None:
+            existing = (
+                self.session.query(AnswerRecord)
+                .filter(
+                    AnswerRecord.matched_learning_item_id == matched_learning_item_id,
+                    AnswerRecord.question_number == question_number,
+                )
+                .one_or_none()
+            )
+            if existing is not None:
+                return existing
+        return (
+            self.session.query(AnswerRecord)
+            .filter(
+                AnswerRecord.exam_source_id == exam_source_id,
+                AnswerRecord.question_number == question_number,
+            )
+            .one_or_none()
+        )
 
     def _find_existing(self, parsed: ParsedLearningItem) -> LearningItem | None:
         if parsed.provider and parsed.provider_problem_id:

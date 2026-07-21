@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from html import escape
+import logging
 
 import streamlit as st
 
@@ -13,6 +14,8 @@ from src.ui.components.solution_link_view_models import (
     SolutionLinkStatus,
     SolutionSourceStatus,
 )
+
+logger = logging.getLogger(__name__)
 
 try:
     from streamlit_ace import st_ace
@@ -163,7 +166,14 @@ def render_learning_workspace(
                 context_code = f"{code}\n\nLearner question: {question}" if question else code
                 try:
                     result = hint_service.generate_hint(build_hint_context(problem, student_code=context_code, programming_language=st.session_state.get(f"student_language_{problem['id']}", "Python"), hint_level=level), hint_level=level)
-                except Exception:
+                except Exception as exc:
+                    logger.exception(
+                        "Hint generation failed for problem_id=%s public_id=%s hint_level=%s error_type=%s",
+                        problem.get("id"),
+                        problem_id,
+                        level,
+                        type(exc).__name__,
+                    )
                     st.error("We could not generate a hint right now. Your attempt is still here; please try again in a moment.")
                 else:
                     st.session_state[f"latest_hint_{problem['id']}"] = result.get("hint", "")

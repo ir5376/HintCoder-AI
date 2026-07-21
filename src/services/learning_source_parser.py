@@ -323,13 +323,52 @@ def extract_passage_groups(text: str) -> list[ParsedPassageGroup]:
 
 
 def parse_answer_text(text: str) -> list[ParsedAnswer]:
-    answers = []
+    answers = _parse_answer_blocks(text)
+    seen = {answer.question_number for answer in answers}
     pattern = re.compile(
         r"(?im)^\s*(?:Q(?:uestion)?\s*)?(\d+)[.)]?\s*(?:answer|ans)?\s*[:：\-]?\s*([A-E]|\d+)(?:\s*[-:]\s*(.*))?$"
     )
     for index, match in enumerate(pattern.finditer(text), start=1):
-        answers.append(ParsedAnswer(match.group(1), match.group(2), (match.group(3) or "").strip(), index))
+        question_number = match.group(1)
+        if question_number in seen:
+            continue
+        answers.append(ParsedAnswer(question_number, _canonical_answer(match.group(2)), (match.group(3) or "").strip(), index))
+        seen.add(question_number)
     return answers
+
+
+def _parse_answer_blocks(text: str) -> list[ParsedAnswer]:
+    normalized = str(text or "").strip()
+    markers = list(re.finditer(r"(?im)^\s*(?:Q(?:uestion)?|문항)\s*(\d+)\s*[:.)-]?\s*$", normalized))
+    answers: list[ParsedAnswer] = []
+    for index, marker in enumerate(markers, start=1):
+        end = markers[index].start() if index < len(markers) else len(normalized)
+        block = normalized[marker.end() : end].strip()
+        answer_match = re.search(
+            r"(?im)^\s*(?:correct\s+answer|answer|ans|정답)\s*[:：]\s*(.+?)\s*$",
+            block,
+        )
+        if not answer_match:
+            continue
+        explanation_match = re.search(r"(?ims)^\s*(?:explanation|solution|해설|풀이)\s*[:：]\s*(.+)$", block)
+        explanation = explanation_match.group(1).strip() if explanation_match else block[answer_match.end() :].strip()
+        answers.append(
+            ParsedAnswer(
+                question_number=marker.group(1),
+                official_answer=_canonical_answer(answer_match.group(1)),
+                explanation=explanation,
+                page_number=index,
+            )
+        )
+    return answers
+
+
+def _canonical_answer(value: str) -> str:
+    answer = re.sub(r"\s+", " ", str(value or "")).strip()
+    answer = re.sub(r"^([A-E])\s*\)\s*", r"\1. ", answer, flags=re.IGNORECASE)
+    answer = re.sub(r"^([A-E])\s*[-:]\s*", r"\1. ", answer, flags=re.IGNORECASE)
+    answer = re.sub(r"^([A-E])\.\s*", lambda match: f"{match.group(1).upper()}. ", answer, count=1)
+    return answer.strip()
 
 
 def extract_pdf_document(data: bytes) -> ExtractedPdfDocument:
