@@ -1,11 +1,13 @@
-# HintCode MVP
+# HintCode
 
-Python 기반 AI 코딩 학습 앱의 1단계 MVP입니다.
+HintCode is an AI-powered learning platform that helps students study previous exam questions more efficiently.
 
-## 설치
+Users can upload PDF question sets, solve problems, receive AI-generated hints, check their answers, and review explanations in one place.
 
-1. Python 3.12 이상을 설치합니다.
-2. 가상 환경을 만듭니다.
+## Installation
+
+1. install Python 3.12 .
+2. create virtual environment.
 
 ```bash
 python -m venv .venv
@@ -13,34 +15,72 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-3. `.env.example`을 복사하여 `.env`로 생성합니다.
+copy .env.example .env
 
 ```bash
 copy .env.example .env
 ```
 
-## 실행
+## Running
 
 ```bash
 streamlit run app.py
 ```
 
-## 테스트
+## testing
 
 ```bash
 pytest
 ```
 
-## 기능
+## Features
 
-- SQLite + SQLAlchemy 기반 DB 자동 초기화
-- 문제 목록 / 카테고리 및 난이도 필터
-- 문제 상세 보기
-- starter_code 표시
-- 문제 샘플 10개 제공
+- Upload previous exam questions through PDF
+- Automatically extract questions
+- AI-generated progressive hints
+- Answer checking
+- Solution explanations
+- Question inventory with category and difficulty filters
 
-## 미구현
+## Architecture
+PDF Upload
+        │
+        ▼
+Question Extraction
+        │
+        ▼
+Question Database
+        │
+        ▼
+Answer Submission
+        │
+        ▼
+Grading
+        │
+        ▼
+AI Hint
+        │
+        ▼
+Explanation
 
-- 사용자 코드 실행 및 채점
-- OpenAI API 호출
-- 로그인 / 관리자 페이지
+## Future Work
+
+- Similar Problem Generation
+- Quiz Mode
+- Personalized Review
+- Memory Cards
+- Gamification (Attendance & Ranking)
+
+## How Codex Helped
+
+We used Codex throughout development to
+
+- build backend features
+- debug errors
+- improve project architecture
+- implement UI integration
+- speed up development
+
+## GPT-5.6 Integration
+
+GPT-5.6 was used throughout the development process to help design the system architecture, improve prompts, debug the application, and accelerate implementation.
