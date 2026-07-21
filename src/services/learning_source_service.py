@@ -82,6 +82,13 @@ class LearningSourceService:
             owner_user_id=owner_user_id,
             title=title,
         )
+        if not preview.questions:
+            if preview.report.get("invalid_pdf"):
+                warnings = preview.report.get("warnings") or []
+                raise ValueError(warnings[-1] if warnings else "The uploaded file is not a valid readable PDF.")
+            if preview.report.get("ocr_required"):
+                raise ValueError("The PDF has pages but no readable text layer. OCR is required for scanned/image-only PDFs.")
+            raise ValueError("No questions could be extracted from the readable PDF text.")
         exam_source = self.repository.create_exam_source(
             preview,
             owner_user_id=owner_user_id,

@@ -61,10 +61,23 @@ def _is_exam_item(problem: dict) -> bool:
 
 def _render_exam_attempt(problem: dict) -> None:
     questions = (problem.get("import_preview") or {}).get("questions") or []
+    if not questions and (problem.get("question_text") or problem.get("choices")):
+        questions = [
+            {
+                "number": problem.get("question_number") or "-",
+                "text": problem.get("question_text") or problem.get("description") or "",
+                "choices": problem.get("choices") or [],
+                "answer_state": problem.get("answer_state", "No answer"),
+                "source_page": problem.get("source_page"),
+            }
+        ]
     if not questions:
         st.markdown("#### Question")
         st.write(problem["description"])
-        st.caption("Question text and choices will appear here after PDF processing is connected.")
+        if problem.get("extraction_error"):
+            st.error(problem["extraction_error"])
+        else:
+            st.info("No questions were extracted from this PDF yet.")
         st.text_area("Your answer", key=f"exam_answer_{problem['id']}", height=120)
         return
     for item in questions:
@@ -73,6 +86,8 @@ def _render_exam_attempt(problem: dict) -> None:
         if item.get("passage"):
             st.caption(item["passage"])
         st.write(item.get("text", "Question text is unavailable."))
+        if item.get("source_page") is not None:
+            st.caption(f"Source page {item['source_page']}")
         choices = item.get("choices") or []
         if choices:
             st.radio("Choose an answer", choices, key=f"exam_choice_{problem['id']}_{number}")

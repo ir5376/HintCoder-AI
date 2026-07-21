@@ -45,6 +45,7 @@ def init_db(database_url: str) -> None:
     try:
         Base.metadata.create_all(engine)
         _ensure_problem_table_columns(engine)
+        _ensure_learning_os_table_columns(engine)
         _seed_database(engine)
     finally:
         engine.dispose()
@@ -68,6 +69,144 @@ def _ensure_problem_table_columns(engine: Engine) -> None:
         for column_name, column_type in required_columns.items():
             if column_name not in existing_columns:
                 connection.execute(text(f"ALTER TABLE problems ADD COLUMN {column_name} {column_type}"))
+
+
+def _ensure_learning_os_table_columns(engine: Engine) -> None:
+    """Add missing Learning OS columns to older SQLite databases without dropping rows."""
+    inspector = inspect(engine)
+    table_columns = {
+        "learning_items": {
+            "owner_user_id": "VARCHAR(100) NOT NULL DEFAULT 'local'",
+            "source_type": "VARCHAR(50) NOT NULL DEFAULT 'unknown'",
+            "source_id": "VARCHAR(255)",
+            "provider": "VARCHAR(100)",
+            "provider_problem_id": "VARCHAR(255)",
+            "subject": "VARCHAR(255)",
+            "exam_name": "VARCHAR(255)",
+            "year": "VARCHAR(50)",
+            "question_number": "VARCHAR(50)",
+            "title": "VARCHAR(255) NOT NULL DEFAULT 'Untitled'",
+            "content": "TEXT",
+            "choices_json": "TEXT NOT NULL DEFAULT '[]'",
+            "verified_answer": "TEXT",
+            "inferred_answer": "TEXT",
+            "answer_status": "VARCHAR(50) NOT NULL DEFAULT 'unavailable'",
+            "explanation": "TEXT",
+            "concepts_json": "TEXT NOT NULL DEFAULT '[]'",
+            "difficulty": "VARCHAR(50) NOT NULL DEFAULT 'Unknown'",
+            "original_reference": "TEXT",
+            "question_type": "VARCHAR(100) NOT NULL DEFAULT 'unknown'",
+            "learning_objective": "TEXT",
+            "metadata_json": "TEXT NOT NULL DEFAULT '{}'",
+            "created_at": "DATETIME",
+            "updated_at": "DATETIME",
+        },
+        "exam_sources": {
+            "owner_user_id": "VARCHAR(100) NOT NULL DEFAULT 'local'",
+            "exam_title": "VARCHAR(255) NOT NULL DEFAULT 'Untitled exam'",
+            "subject": "VARCHAR(255)",
+            "year": "VARCHAR(50)",
+            "question_pdf_name": "VARCHAR(255) NOT NULL DEFAULT ''",
+            "answer_pdf_name": "VARCHAR(255)",
+            "answer_status": "VARCHAR(50) NOT NULL DEFAULT 'unavailable'",
+            "import_report_json": "TEXT NOT NULL DEFAULT '{}'",
+            "created_at": "DATETIME",
+        },
+        "answer_records": {
+            "exam_source_id": "INTEGER",
+            "subject": "VARCHAR(255)",
+            "question_number": "VARCHAR(50) NOT NULL DEFAULT ''",
+            "verified_answer": "TEXT NOT NULL DEFAULT ''",
+            "explanation": "TEXT",
+            "page_number": "INTEGER",
+            "matched_learning_item_id": "INTEGER",
+            "created_at": "DATETIME",
+        },
+        "passage_groups": {
+            "exam_source_id": "INTEGER",
+            "group_identifier": "VARCHAR(100) NOT NULL DEFAULT ''",
+            "passage_text": "TEXT NOT NULL DEFAULT ''",
+            "page_number": "INTEGER",
+            "metadata_json": "TEXT NOT NULL DEFAULT '{}'",
+            "created_at": "DATETIME",
+        },
+        "knowledge_entries": {
+            "learning_item_id": "INTEGER",
+            "concept": "VARCHAR(255) NOT NULL DEFAULT ''",
+            "source": "VARCHAR(100) NOT NULL DEFAULT ''",
+            "metadata_json": "TEXT NOT NULL DEFAULT '{}'",
+            "created_at": "DATETIME",
+        },
+        "learning_artifacts": {
+            "learning_item_id": "INTEGER",
+            "artifact_type": "VARCHAR(100) NOT NULL DEFAULT ''",
+            "content_json": "TEXT NOT NULL DEFAULT '{}'",
+            "created_at": "DATETIME",
+        },
+        "learning_review_queue": {
+            "user_id": "VARCHAR(100) NOT NULL DEFAULT 'local'",
+            "learning_item_id": "INTEGER",
+            "interval_days": "INTEGER NOT NULL DEFAULT 1",
+            "status": "VARCHAR(50) NOT NULL DEFAULT 'pending'",
+            "created_at": "DATETIME",
+            "completed_at": "DATETIME",
+        },
+        "learning_history": {
+            "user_id": "VARCHAR(100) NOT NULL DEFAULT 'local'",
+            "learning_item_id": "INTEGER",
+            "event_type": "VARCHAR(100) NOT NULL DEFAULT ''",
+            "payload_json": "TEXT NOT NULL DEFAULT '{}'",
+            "created_at": "DATETIME",
+        },
+        "learning_activities": {
+            "user_id": "VARCHAR(100) NOT NULL DEFAULT 'local'",
+            "activity_date": "DATE",
+            "event_type": "VARCHAR(100) NOT NULL DEFAULT ''",
+            "learning_item_id": "INTEGER",
+            "created_at": "DATETIME",
+        },
+        "xp_events": {
+            "user_id": "VARCHAR(100) NOT NULL DEFAULT 'local'",
+            "event_type": "VARCHAR(100) NOT NULL DEFAULT ''",
+            "points": "INTEGER NOT NULL DEFAULT 0",
+            "learning_item_id": "INTEGER",
+            "idempotency_key": "VARCHAR(255) NOT NULL DEFAULT ''",
+            "created_at": "DATETIME",
+        },
+        "learning_attempts": {
+            "user_id": "VARCHAR(100) NOT NULL DEFAULT 'local'",
+            "learning_item_id": "INTEGER",
+            "provider": "VARCHAR(100) NOT NULL DEFAULT ''",
+            "provider_problem_id": "VARCHAR(255) NOT NULL DEFAULT ''",
+            "language": "VARCHAR(100)",
+            "source_code_hash": "VARCHAR(255)",
+            "status": "VARCHAR(50) NOT NULL DEFAULT 'pending'",
+            "created_at": "DATETIME",
+            "updated_at": "DATETIME",
+        },
+        "provider_submission_results": {
+            "user_id": "VARCHAR(100) NOT NULL DEFAULT 'local'",
+            "attempt_id": "INTEGER",
+            "provider": "VARCHAR(100) NOT NULL DEFAULT ''",
+            "provider_problem_id": "VARCHAR(255) NOT NULL DEFAULT ''",
+            "problem_url": "TEXT",
+            "language": "VARCHAR(100)",
+            "source_code_hash": "VARCHAR(255)",
+            "raw_status": "VARCHAR(255)",
+            "normalized_status": "VARCHAR(50) NOT NULL DEFAULT 'unknown'",
+            "submitted_at": "DATETIME",
+            "created_at": "DATETIME",
+        },
+    }
+
+    with engine.begin() as connection:
+        for table_name, required_columns in table_columns.items():
+            if not inspector.has_table(table_name):
+                continue
+            existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+            for column_name, column_type in required_columns.items():
+                if column_name not in existing_columns:
+                    connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"))
 
 
 def _load_seed_data() -> list[dict]:

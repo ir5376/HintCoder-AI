@@ -7,6 +7,34 @@ import streamlit as st
 from src.services.problem_service import ProblemService
 
 
+def _uploaded_file_bytes(uploaded_file) -> bytes:
+    if uploaded_file is None:
+        return b""
+    if hasattr(uploaded_file, "seek"):
+        try:
+            uploaded_file.seek(0)
+        except Exception:
+            pass
+    if hasattr(uploaded_file, "getvalue"):
+        data = uploaded_file.getvalue()
+    else:
+        data = uploaded_file.read()
+    if hasattr(uploaded_file, "seek"):
+        try:
+            uploaded_file.seek(0)
+        except Exception:
+            pass
+    return bytes(data or b"")
+
+
+def _cache_uploaded_pdf(prefix: str, uploaded_file) -> bytes:
+    data = _uploaded_file_bytes(uploaded_file)
+    st.session_state[f"{prefix}_bytes"] = data
+    st.session_state[f"{prefix}_filename"] = getattr(uploaded_file, "name", "")
+    st.session_state[f"{prefix}_mime_type"] = getattr(uploaded_file, "type", "")
+    return data
+
+
 def _provider_for(problem: dict) -> str:
     host = urlparse(problem.get("source_reference", "") or "").netloc.lower()
     if "leetcode" in host:
@@ -16,7 +44,7 @@ def _provider_for(problem: dict) -> str:
     return {"Notes": "Personal notes", "PDF": "PDF import"}.get(problem.get("source_type"), problem.get("source_type") or "HintCode")
 
 
-def _add_source() -> str | None:
+def _add_source(service: ProblemService) -> str | None:
     source_type = st.session_state.get("new_source_type", "URL")
     question_pdf = st.session_state.get("source_pdf")
     answer_pdf = st.session_state.get("source_answer_pdf")
@@ -31,7 +59,33 @@ def _add_source() -> str | None:
     reference = value if source_type != "PDF" else question_pdf.name
     name = st.session_state.get("source_name", "").strip() or (urlparse(value).netloc if source_type == "URL" else getattr(question_pdf, "name", "Untitled note"))
     subject = st.session_state.get("source_subject", "Auto detect")
-    preview = st.session_state.get("pdf_import_preview", {}) if source_type == "PDF" else {}
+    if source_type == "PDF":
+        question_pdf_bytes = st.session_state.get("source_pdf_bytes")
+        if question_pdf_bytes is None or st.session_state.get("source_pdf_filename") != getattr(question_pdf, "name", ""):
+            question_pdf_bytes = _cache_uploaded_pdf("source_pdf", question_pdf)
+        answer_pdf_bytes = None
+        if answer_pdf:
+            answer_pdf_bytes = st.session_state.get("source_answer_pdf_bytes")
+            if answer_pdf_bytes is None or st.session_state.get("source_answer_pdf_filename") != getattr(answer_pdf, "name", ""):
+                answer_pdf_bytes = _cache_uploaded_pdf("source_answer_pdf", answer_pdf)
+        try:
+            result = service.import_pdf_source(
+                question_pdf_name=st.session_state.get("source_pdf_filename") or question_pdf.name,
+                question_pdf=question_pdf_bytes,
+                answer_pdf_name=getattr(answer_pdf, "name", "") if answer_pdf else "",
+                answer_pdf=answer_pdf_bytes,
+                title=name,
+            )
+        except Exception as exc:
+            return f"PDF processing failed: {exc}"
+        imported = result.get("items", [])
+        st.session_state["source_added"] = name
+        st.session_state["last_pdf_import_result"] = result
+        if imported:
+            st.session_state["last_imported_problem_id"] = imported[0].get("problem_id")
+        return None
+
+    preview = {}
     item = {
         "id": f"source-{len(st.session_state.get('added_sources', [])) + 1}",
         "title": name,
@@ -54,14 +108,25 @@ def _add_source() -> str | None:
     return None
 
 
-def _render_pdf_preview() -> None:
+def _render_pdf_preview(service: ProblemService) -> None:
     preview = st.session_state.get("pdf_import_preview", {})
     st.markdown("#### Import preview")
     if st.session_state.get("source_answer_pdf") is None:
         st.info("Unverified learning mode: continue with hints, but verified grading and answer analysis are unavailable until an official answer file is added.")
     else:
         st.caption("Official answer file selected. Verification will be available after PDF processing completes.")
-    fields = [("Detected subject", preview.get("detected_subject")), ("Questions", preview.get("question_count")), ("Answers", preview.get("answer_count")), ("Matched answers", preview.get("matched_answers")), ("Unmatched questions", preview.get("unmatched_questions"))]
+    fields = [
+        ("Detected subject", preview.get("detected_subject")),
+        ("Uploaded bytes", preview.get("uploaded_byte_length")),
+        ("PDF signature", "Yes" if preview.get("starts_with_pdf_signature") else "No"),
+        ("Extractor", preview.get("extraction_method") or "Not available"),
+        ("Pages", preview.get("page_count")),
+        ("Extracted characters", preview.get("extracted_char_count")),
+        ("Questions", preview.get("question_count")),
+        ("Answers", preview.get("answer_count")),
+        ("Matched answers", preview.get("matched_answers")),
+        ("Unmatched questions", preview.get("unmatched_questions")),
+    ]
     columns = st.columns(2)
     for index, (label, value) in enumerate(fields):
         columns[index % 2].caption(f"{label}: {value if value is not None else 'Not available'}")
@@ -79,6 +144,8 @@ def _render_pdf_preview() -> None:
     if st.session_state.get("show_pdf_warnings"):
         for warning in preview.get("warnings", []):
             st.warning(warning)
+        for error in preview.get("extraction_errors", []):
+            st.caption(f"Extractor detail: {error}")
     cancel, confirm = st.columns(2)
     with cancel:
         if st.button("Cancel", key="cancel_pdf_import", use_container_width=True):
@@ -87,7 +154,8 @@ def _render_pdf_preview() -> None:
             st.rerun()
     with confirm:
         if st.button("Confirm import", type="primary", key="confirm_pdf_import", use_container_width=True):
-            error = _add_source()
+            with st.spinner("Extracting and saving PDF questions..."):
+                error = _add_source(service)
             if error:
                 st.error(error)
             else:
@@ -96,7 +164,7 @@ def _render_pdf_preview() -> None:
 
 
 @st.dialog("Add Learning Source")
-def _render_source_dialog() -> None:
+def _render_source_dialog(service: ProblemService) -> None:
     st.radio("Source type", ["URL", "PDF", "Notes"], horizontal=True, key="new_source_type")
     source_type = st.session_state.get("new_source_type", "URL")
     st.text_input("Name (optional)", key="source_name", placeholder="e.g. Two Sum practice")
@@ -113,15 +181,53 @@ def _render_source_dialog() -> None:
             if st.session_state.get("source_pdf") is None:
                 st.warning("Choose a question paper PDF before previewing it.")
             else:
-                st.session_state["pdf_import_preview"] = st.session_state.get("pdf_import_preview") or {"detected_subject": st.session_state.get("source_subject", "Auto detect"), "question_count": None, "answer_count": None, "matched_answers": None, "unmatched_questions": None, "warnings": ["PDF processing is not connected yet. Counts and question text will appear after the parser returns a preview."], "questions": []}
+                question_pdf = st.session_state["source_pdf"]
+                answer_pdf = st.session_state.get("source_answer_pdf")
+                question_pdf_bytes = _cache_uploaded_pdf("source_pdf", question_pdf)
+                answer_pdf_bytes = _cache_uploaded_pdf("source_answer_pdf", answer_pdf) if answer_pdf else None
+                with st.spinner("Reading PDF preview..."):
+                    preview = service.preview_pdf_source(
+                        question_pdf_name=question_pdf.name,
+                        question_pdf=question_pdf_bytes,
+                        answer_pdf_name=getattr(answer_pdf, "name", "") if answer_pdf else "",
+                        answer_pdf=answer_pdf_bytes,
+                        title=st.session_state.get("source_name", "").strip(),
+                    )
+                report = preview.get("report", {})
+                st.session_state["pdf_import_preview"] = {
+                    "detected_subject": preview.get("subject") or st.session_state.get("source_subject", "Auto detect"),
+                    "question_count": report.get("questions_detected"),
+                    "page_count": report.get("page_count"),
+                    "extracted_char_count": report.get("extracted_char_count"),
+                    "uploaded_byte_length": report.get("uploaded_byte_length"),
+                    "starts_with_pdf_signature": report.get("starts_with_pdf_signature"),
+                    "extraction_method": report.get("extraction_method"),
+                    "extraction_errors": report.get("extraction_errors", []),
+                    "invalid_pdf": report.get("invalid_pdf"),
+                    "ocr_required": report.get("ocr_required"),
+                    "mime_type": st.session_state.get("source_pdf_mime_type"),
+                    "answer_count": report.get("answers_detected"),
+                    "matched_answers": report.get("answers_matched"),
+                    "unmatched_questions": report.get("questions_without_answers"),
+                    "warnings": report.get("warnings", []),
+                    "questions": [
+                        {
+                            "number": question.get("question_number"),
+                            "text": question.get("content"),
+                            "choices": question.get("choices") or [],
+                            "answer_state": "Verified" if question.get("answer_status") == "verified" else "No answer",
+                        }
+                        for question in preview.get("questions", [])
+                    ],
+                }
                 st.session_state["show_pdf_preview"] = True
         if st.session_state.get("show_pdf_preview"):
-            _render_pdf_preview()
+            _render_pdf_preview(service)
     else:
         st.text_area("Notes", key="source_note", placeholder="Paste or write the learning material here.", height=120)
 
     if source_type != "PDF" and st.button("Add Learning Source", type="primary", key="add_source"):
-        error = _add_source()
+        error = _add_source(service)
         if error:
             st.error(error)
         else:
@@ -131,9 +237,12 @@ def _render_source_dialog() -> None:
 def render_problem_list(service: ProblemService, on_open_problem: Callable[[int | str], None]) -> None:
     st.markdown('<div class="hc-eyebrow">Learning Sources</div><div class="hc-title">Build your learning library.</div><p class="hc-lede">Add a source once, then learn from it in the same focused workspace.</p>', unsafe_allow_html=True)
     if st.button("Add Learning Source", type="primary"):
-        _render_source_dialog()
+        _render_source_dialog(service)
     if name := st.session_state.pop("source_added", None):
         st.success(f"{name} was added to your learning sources.")
+    if result := st.session_state.pop("last_pdf_import_result", None):
+        report = result.get("import_report", {})
+        st.caption(f"Imported {report.get('questions_detected', 0)} question(s) from the PDF.")
     left, right = st.columns(2)
     filters = service.get_filters()
     with left:
